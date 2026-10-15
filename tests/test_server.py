@@ -1,6 +1,9 @@
 """End-to-end tests: talk to the MCP server through a real MCP client."""
 
+import os
+import shutil
 import sys
+from pathlib import Path
 
 import pytest
 from mcp import Client, StdioServerParameters
@@ -82,10 +85,70 @@ async def test_stdio_entrypoint(fixtures_dir):
     assert "example.L5X" in paths
 
 
+@pytest.mark.parametrize("root_source", ["cwd", "env", "uv-project"])
+async def test_stdio_discovers_client_directory(fixtures_dir, tmp_path, root_source):
+    env = dict(os.environ)
+    env.pop("L5X_MCP_ROOT", None)
+    command = sys.executable
+    args = ["-m", "l5x_mcp"]
+    cwd = fixtures_dir
+    if root_source == "env":
+        env["L5X_MCP_ROOT"] = str(fixtures_dir)
+        cwd = tmp_path
+    elif root_source == "uv-project":
+        command = shutil.which("uv")
+        if command is None:
+            pytest.skip("uv is not installed")
+        args = [
+            "run",
+            "--project",
+            str(Path(__file__).resolve().parents[1]),
+            "--no-sync",
+            "l5x-mcp",
+        ]
+
+    params = StdioServerParameters(command=command, args=args, cwd=str(cwd), env=env)
+    async with Client(params) as client:
+        result = await client.call_tool("list_l5x_files", {})
+
+    assert not result.is_error
+    assert Path(result.structured_content["root"]) == fixtures_dir.resolve()
+    assert "example.L5X" in {f["path"] for f in result.structured_content["files"]}
+
+
 def test_parse_args_root_from_env(monkeypatch, tmp_path):
     monkeypatch.setenv("L5X_MCP_ROOT", str(tmp_path))
     assert parse_args([]).root == str(tmp_path)
     assert parse_args(["--root", "other"]).root == "other"
+
+
+def test_parse_args_default_root(monkeypatch):
+    monkeypatch.delenv("L5X_MCP_ROOT", raising=False)
+    assert parse_args([]).root is None
+
+
+@pytest.mark.parametrize("placeholder", ["${workspaceFolder}", "${env:PROJECT_ROOT}"])
+@pytest.mark.parametrize("source", ["argument", "environment"])
+def test_parse_args_rejects_unresolved_root(monkeypatch, capsys, placeholder, source):
+    monkeypatch.delenv("L5X_MCP_ROOT", raising=False)
+    root = placeholder + "\\exports"
+    if source == "environment":
+        monkeypatch.setenv("L5X_MCP_ROOT", root)
+    args = ["--root", root] if source == "argument" else []
+
+    with pytest.raises(SystemExit) as exc_info:
+        parse_args(args)
+
+    assert exc_info.value.code == 2
+    error = capsys.readouterr().err
+    assert "unresolved" in error
+    assert placeholder in error
+    assert "--project" in error
+
+
+def test_explicit_root_overrides_unresolved_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("L5X_MCP_ROOT", "${workspaceFolder}")
+    assert parse_args(["--root", str(tmp_path)]).root == str(tmp_path)
 
 
 def test_strip_registry_doc():
