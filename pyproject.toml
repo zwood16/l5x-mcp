@@ -1,0 +1,43 @@
+[project]
+name = "l5x-mcp"
+version = "0.1.0"
+description = "A simple L5X interface for LLMs"
+readme = "README.md"
+authors = [
+    { name = "Zac Wood", email = "zwood@a-i-corp.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "mcp[cli]>=2.3.0",
+    "py-l5x>=0.2.0",
+]
+
+[project.scripts]
+l5x-mcp = "l5x_mcp:main"
+
+[build-system]
+requires = ["uv_build>=0.12.14,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+py-l5x = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.2.0/py_l5x-0.2.0-py3-none-any.whl" }
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+# The rule categories to enable.
+select = [
+    "E",   # pycodestyle (catches formatting-adjacent errors)
+    "F",   # Pyflakes (catches logical errors, like unused variables)
+    "I",   # isort (automatically sorts your imports)
+    "UP",  # pyupgrade (suggests modern syntax upgrades)
+    "B",   # flake8-bugbear (catches common bugs and gotchas)
+    "SIM", # flake8-simplify (suggests cleaner, more elegant code)
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,279 @@
+"""Registry for managing L5X project files with discovery and caching."""
+
+from __future__ import annotations
+
+import threading
+from collections.abc import Mapping
+from pathlib import Path
+from typing import TypeVar
+
+from py_l5x import load
+from py_l5x.parsers.project import Project
+
+T = TypeVar("T")
+
+
+class L5XError(ValueError):
+    """Base exception for all user-facing L5X errors."""
+
+    pass
+
+
+class ProjectNotFoundError(L5XError):
+    """Raised when a project file cannot be found."""
+
+    pass
+
+
+class AmbiguousProjectError(L5XError):
+    """Raised when multiple project files match the query."""
+
+    pass
+
+
+class ItemNotFoundError(L5XError):
+    """Raised when an item is not found in a collection."""
+
+    pass
+
+
+def lookup(collection: Mapping[str, T], name: str, kind: str) -> T:
+    """Look up an item in a collection with exact or case-insensitive matching.
+
+    Args:
+        collection: Mapping of names to items.
+        name: Item name to look up.
+        kind: Description of item type (e.g. "Program", "Tag").
+
+    Returns:
+        The matched item.
+
+    Raises:
+        ItemNotFoundError: If no exact or unique case-insensitive match found.
+    """
+    # Try exact match first
+    if name in collection:
+        return collection[name]
+
+    # Try case-insensitive match
+    lower_name = name.lower()
+    matches = [key for key in collection if key.lower() == lower_name]
+
+    if len(matches) == 1:
+        return collection[matches[0]]
+
+    # No match or ambiguous
+    if not collection:
+        raise ItemNotFoundError(
+            f"{kind} '{name}' not found. This project has no {kind.lower()}s."
+        )
+
+    # Build available names list
+    available = sorted(collection.keys())
+    if len(available) <= 50:
+        available_str = ", ".join(available)
+    else:
+        more = len(available) - 50
+        available_str = ", ".join(available[:50]) + f", ... ({more} more)"
+
+    raise ItemNotFoundError(f"{kind} '{name}' not found. Available: {available_str}")
+
+
+class ProjectRegistry:
+    """Registry for discovering and caching L5X project files."""
+
+    def __init__(self, root: str | Path | None = None) -> None:
+        """Initialize the registry with a root directory.
+
+        Args:
+            root: Root directory for searching. Defaults to current working directory.
+
+        Raises:
+            L5XError: If root is not a directory.
+        """
+        if root is None:
+            self.root = Path.cwd().resolve()
+        else:
+            self.root = Path(root).resolve()
+
+        if not self.root.is_dir():
+            raise L5XError(f"Root directory does not exist: {self.root}")
+
+        self._cache: dict[Path, tuple[int, int, Project]] = {}
+        self._lock = threading.Lock()
+
+    def discover(self, subdir: str | None = None) -> list[Path]:
+        """Recursively discover .L5X files under root directory.
+
+        Args:
+            subdir: Optional subdirectory to search within root.
+
+        Returns:
+            Sorted list of absolute resolved paths to .L5X files.
+
+        Raises:
+            L5XError: If subdir escapes root or other path issues.
+        """
+        if subdir:
+            search_root = (self.root / subdir).resolve()
+            # Verify subdir is within root
+            try:
+                search_root.relative_to(self.root)
+            except ValueError:
+                raise L5XError(f"Subdirectory escapes root: {subdir}") from None
+        else:
+            search_root = self.root
+
+        l5x_files = []
+
+        def _walk(current_dir: Path) -> None:
+            """Recursively walk directory, skipping hidden and cache dirs."""
+            try:
+                for entry in current_dir.iterdir():
+                    # Skip hidden directories
+                    if entry.name.startswith("."):
+                        continue
+                    # Skip cache/venv directories
+                    if entry.name in ("node_modules", "__pycache__", "venv"):
+                        continue
+
+                    if entry.is_dir():
+                        _walk(entry)
+                    elif entry.is_file() and entry.suffix.lower() == ".l5x":
+                        l5x_files.append(entry.resolve())
+            except (OSError, PermissionError):
+                # Skip directories we can't read
+                pass
+
+        _walk(search_root)
+        return sorted(l5x_files)
+
+    def resolve(self, path: str | None = None) -> Path:
+        """Resolve a project file path.
+
+        Args:
+            path: File path (absolute, relative to root, or None for auto-discovery).
+
+        Returns:
+            Resolved absolute path to the project file.
+
+        Raises:
+            ProjectNotFoundError: If file not found or auto-discovery fails.
+            AmbiguousProjectError: If multiple files discovered and no path given.
+        """
+        if path is None or path == "":
+            # Auto-discovery mode
+            discovered = self.discover()
+            if len(discovered) == 0:
+                raise ProjectNotFoundError(
+                    f"No .L5X files found under {self.root}. "
+                    "Pass an explicit `path` to an .L5X file."
+                )
+            if len(discovered) > 1:
+                rel_paths = [self.relpath(p) for p in discovered]
+                raise AmbiguousProjectError(
+                    f"Multiple .L5X files found under {self.root}. "
+                    "Pass the `path` argument with one of:\n" + "\n".join(rel_paths)
+                )
+            return discovered[0]
+
+        # Resolve given path
+        resolved = Path(path).expanduser()
+
+        # If relative, make it relative to root
+        if not resolved.is_absolute():
+            resolved = self.root / resolved
+
+        resolved = resolved.resolve()
+
+        # Check if file exists
+        if not resolved.is_file():
+            discovered = self.discover()
+            if discovered:
+                rel_paths = [self.relpath(p) for p in discovered]
+                raise ProjectNotFoundError(
+                    f"File not found: {path}\n"
+                    f"Available .L5X files:\n" + "\n".join(rel_paths)
+                )
+            else:
+                raise ProjectNotFoundError(f"File not found: {path}")
+
+        return resolved
+
+    def get(self, path: str | None = None) -> Project:
+        """Get a project with optional caching.
+
+        Args:
+            path: File path (None for auto-discovery).
+
+        Returns:
+            The loaded Project object.
+
+        Raises:
+            ProjectNotFoundError: If file not found.
+            AmbiguousProjectError: If multiple files found.
+            L5XError: If XML parsing fails.
+        """
+        return self.get_with_path(path)[1]
+
+    def get_with_path(self, path: str | None = None) -> tuple[Path, Project]:
+        """Get a project with its resolved path.
+
+        Args:
+            path: File path (None for auto-discovery).
+
+        Returns:
+            Tuple of (resolved path, Project object).
+
+        Raises:
+            ProjectNotFoundError: If file not found.
+            AmbiguousProjectError: If multiple files found.
+            L5XError: If XML parsing fails.
+        """
+        resolved_path = self.resolve(path)
+
+        with self._lock:
+            # Check cache
+            try:
+                stat = resolved_path.stat()
+                mtime_ns = stat.st_mtime_ns
+                size = stat.st_size
+
+                if resolved_path in self._cache:
+                    cached_mtime, cached_size, cached_project = self._cache[
+                        resolved_path
+                    ]
+                    if cached_mtime == mtime_ns and cached_size == size:
+                        return resolved_path, cached_project
+
+            except OSError as e:
+                raise ProjectNotFoundError(f"Cannot stat file: {resolved_path}") from e
+
+            # Load or reload
+            try:
+                project = load(str(resolved_path))
+            except FileNotFoundError as e:
+                raise ProjectNotFoundError(str(e)) from e
+            except ValueError as e:
+                raise L5XError(f"Failed to parse L5X file {resolved_path}: {e}") from e
+
+            # Update cache
+            self._cache[resolved_path] = (mtime_ns, size, project)
+            return resolved_path, project
+
+    def relpath(self, path: Path) -> str:
+        """Get relative path to file if inside root, else absolute.
+
+        Args:
+            path: The path to convert.
+
+        Returns:
+            Relative path string (posix-style) or absolute string.
+        """
+        path = path.resolve()
+        try:
+            rel = path.relative_to(self.root)
+            return rel.as_posix()
+        except ValueError:
+            # Path is outside root
+            return str(path)

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "l5x": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "l5x-mcp", "--root", "${workspaceFolder}/tests/fixtures"]
+    }
+  }
+}
