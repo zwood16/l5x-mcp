@@ -4,13 +4,8 @@ import json
 
 import pytest
 
-from l5x_mcp.registry import ItemNotFoundError, L5XError
-from l5x_mcp.tools.tags import (
-    _flatten_multi_dim_index,
-    _parse_operand_path,
-    get_tag,
-    list_tags,
-)
+from l5x_mcp.registry import ItemNotFoundError, L5XError, ProjectRegistry
+from l5x_mcp.tools.tags import get_tag, list_tags
 
 
 class TestListTags:
@@ -162,93 +157,6 @@ class TestListTags:
             assert "Defaulted to" in result["note"] or result["scope"] == "MainProgram"
 
 
-class TestParseOperandPath:
-    """Tests for _parse_operand_path function."""
-
-    def test_parse_simple_member_path(self):
-        """Test parsing a simple member access path."""
-        segments = _parse_operand_path("a_udt_instance.a_nested_UDT.bool1")
-        assert segments == ["a_udt_instance", "a_nested_UDT", "bool1"]
-
-    def test_parse_array_index(self):
-        """Test parsing array index."""
-        segments = _parse_operand_path("ALLOWABLE_ALARMS[3]")
-        assert segments == ["ALLOWABLE_ALARMS", 3]
-
-    def test_parse_array_index_with_member(self):
-        """Test parsing array index followed by member."""
-        segments = _parse_operand_path("ALLOWABLE_ALARMS[3].LEN")
-        assert segments == ["ALLOWABLE_ALARMS", 3, "LEN"]
-
-    def test_parse_bit_access(self):
-        """Test parsing bit access on scalar."""
-        segments = _parse_operand_path("a_dint.2")
-        assert segments == ["a_dint", 2]
-
-    def test_parse_multi_dimensional_index(self):
-        """Test parsing multi-dimensional array index."""
-        segments = _parse_operand_path("arr[1,2,3]")
-        assert segments == ["arr", (1, 2, 3)]
-
-    def test_parse_member_after_multi_dim(self):
-        """Test parsing member access after multi-dim index."""
-        segments = _parse_operand_path("arr[1,2].member")
-        assert segments == ["arr", (1, 2), "member"]
-
-    def test_parse_invalid_path_empty(self):
-        """Test that empty path raises error."""
-        with pytest.raises(L5XError):
-            _parse_operand_path("")
-
-    def test_parse_invalid_path_bad_name(self):
-        """Test that paths with invalid syntax raise error."""
-        # A path starting with invalid characters
-        with pytest.raises(L5XError):
-            _parse_operand_path("@invalid")
-
-    def test_parse_invalid_path_unclosed_bracket(self):
-        """Test that unclosed bracket raises error."""
-        with pytest.raises(L5XError):
-            _parse_operand_path("arr[1")
-
-    def test_parse_invalid_path_bad_index(self):
-        """Test that non-integer index raises error."""
-        with pytest.raises(L5XError):
-            _parse_operand_path("arr[abc]")
-
-
-class TestFlattenMultiDimIndex:
-    """Tests for _flatten_multi_dim_index function."""
-
-    def test_flatten_2d_index(self):
-        """Test flattening 2D index (row-major)."""
-        # 2x3 array, [0,1] should be flat 1, [1,0] should be flat 3
-        flat = _flatten_multi_dim_index((0, 1), [2, 3])
-        assert flat == 1
-
-        flat = _flatten_multi_dim_index((1, 0), [2, 3])
-        assert flat == 3
-
-    def test_flatten_3d_index(self):
-        """Test flattening 3D index."""
-        # 2x3x4 array
-        flat = _flatten_multi_dim_index((0, 0, 0), [2, 3, 4])
-        assert flat == 0
-
-        flat = _flatten_multi_dim_index((1, 2, 3), [2, 3, 4])
-        assert flat == 1 * 12 + 2 * 4 + 3
-
-    def test_flatten_index_out_of_bounds(self):
-        """Test that out-of-bounds index raises error."""
-        with pytest.raises(L5XError):
-            _flatten_multi_dim_index((2, 0), [2, 3])
-
-    def test_flatten_dimension_mismatch(self):
-        """Test that dimension mismatch raises error."""
-        with pytest.raises(L5XError):
-            _flatten_multi_dim_index((1, 2, 3), [2, 3])
-
-
 class TestGetTag:
     """Tests for get_tag function."""
 
@@ -355,8 +263,8 @@ class TestGetTag:
         assert "operand" in result
         assert result["operand"] == "ALLOWABLE_ALARMS[3]"
         assert (
-            result["node"]["kind"] == "structure"
-        )  # robotAlarmCode array elements are structures
+            result["node"]["kind"] == "string"
+        )  # robotAlarmCode is a STRING-family type
 
     def test_get_tag_with_array_member(self, registry):
         """Test getting a member of an array element."""
@@ -478,13 +386,11 @@ class TestGetTag:
         assert result["name"] == "a_counter"
         assert result["data_type"] == "COUNTER"
 
-    def test_get_tag_array_element_has_members(self, registry):
-        """Test that array element is structure with accessible members."""
+    def test_get_tag_array_element_is_string(self, registry):
+        """Test that a STRING-family array element is a string node with text."""
         result = get_tag(registry, "ALLOWABLE_ALARMS[0]", path="example.L5X")
-        assert result["node"]["kind"] == "structure"
-        # The structure should have members
-        if "members" in result["node"]:
-            assert len(result["node"]["members"]) > 0
+        assert result["node"]["kind"] == "string"
+        assert "value" in result["node"]
 
     def test_get_tag_also_in_programs(self, registry):
         """Test that also_in_programs is set for controller tags found in programs."""
@@ -535,3 +441,262 @@ class TestGetTagSampleOutput:
         # Print for documentation (will appear in test output)
         print("\n=== Sample get_tag output ===")
         print(json.dumps(result, indent=2))
+
+
+class TestListTagsScopes:
+    """Tests for the controller, module_io and program scopes of list_tags."""
+
+    def test_controller_scope_excludes_module_tags(self, registry):
+        """Controller scope lists only the 9 controller-scoped tags."""
+        result = list_tags(registry, scope="controller", limit=1000, path="example.L5X")
+        assert result["total"] == 9
+        assert all(":" not in t["name"] for t in result["tags"])
+
+    def test_io_scope_lists_module_tags(self, registry):
+        """module_io scope lists module I/O references with kind and module."""
+        result = list_tags(registry, scope="module_io", limit=1000, path="example.L5X")
+        assert result["scope"] == "module_io"
+        assert result["total"] == 32
+        names = {t["name"] for t in result["tags"]}
+        assert {"Local:1:I", "Local:2:I", "ShopRobot:I"} <= names
+        local2 = next(t for t in result["tags"] if t["name"] == "Local:2:I")
+        assert local2["kind"] == "I"
+        assert local2["module"] == "Test_Safety_Input"
+        assert "tag_type" not in local2
+
+    def test_io_scope_is_case_insensitive_and_filterable(self, registry):
+        """The scope name and name filter work on module tags."""
+        result = list_tags(
+            registry, scope="MODULE_IO", name_contains="SHOPROBOT", path="example.L5X"
+        )
+        assert result["total"] >= 1
+        assert all("shoprobot" in t["name"].lower() for t in result["tags"])
+
+    def test_program_scope_has_no_module_tags(self, registry):
+        """Program scope is unaffected by module I/O tags."""
+        result = list_tags(
+            registry, scope="MainProgram", limit=1000, path="example.L5X"
+        )
+        assert all(":" not in t["name"] for t in result["tags"])
+
+    def test_controller_no_match_note_mentions_io(self, registry):
+        """The no-results note points to scope="module_io" when module tags exist."""
+        result = list_tags(
+            registry,
+            scope="controller",
+            name_contains="ZZZNONEXISTENT",
+            path="example.L5X",
+        )
+        assert 'scope="module_io"' in result["note"]
+        assert "module I/O tags exist" in result["note"]
+
+
+class TestGetTagOperands:
+    """Operand-path behaviour of get_tag."""
+
+    def test_bit_comment_is_description(self, registry):
+        """A commented bit reports its comment as the node description."""
+        result = get_tag(
+            registry, "a_commented_dint.0", scope="MainProgram", path="example.L5X"
+        )
+        assert result["scope"] == "MainProgram"
+        assert result["operand"] == "a_commented_dint.0"
+        assert result["node"]["kind"] == "scalar"
+        assert result["node"]["data_type"] == "BOOL"
+        assert result["node"]["description"] == "this is bit 0"
+
+    def test_module_io_operand(self, registry):
+        """Module I/O operands resolve under scope module_io."""
+        result = get_tag(registry, "Local:2:I.Pt00.Data", path="example.L5X")
+        assert result["scope"] == "module_io"
+        assert result["tag"]["name"] == "Local:2:I"
+        assert result["operand"] == "Local:2:I.Pt00.Data"
+        assert result["node"]["kind"] == "scalar"
+        assert result["node"]["data_type"] == "BOOL"
+
+    def test_module_io_base_detail_without_subpath(self, registry):
+        """A module I/O name without a sub-path returns the tag detail."""
+        result = get_tag(registry, "ShopRobot:I", path="example.L5X")
+        assert result["scope"] == "module_io"
+        assert result["kind"] == "I"
+        assert "value_tree" in result
+
+    def test_aoi_instance_inherits_bit_description(self, registry):
+        """Bits of an AOI-typed tag inherit the definition's bit comments."""
+        result = get_tag(
+            registry, "sequence.state.0", scope="MainProgram", path="example.L5X"
+        )
+        assert result["operand"] == "sequence.state.0"
+        assert result["node"]["description"] == "running"
+        assert result["node"]["data_type"] == "BOOL"
+
+    def test_case_insensitive_members(self, registry):
+        """Member names match case-insensitively and report canonical case."""
+        result = get_tag(
+            registry,
+            "a_udt_instance.A_NESTED_UDT.BOOL1",
+            scope="MainProgram",
+            path="example.L5X",
+        )
+        assert result["operand"] == "a_udt_instance.a_nested_UDT.bool1"
+
+    def test_multi_dimensional_index(self, registry):
+        """A 2-D subscript selects the element with that Logix subscript."""
+        result = get_tag(
+            registry, "a_2d_array[1,2]", scope="MainProgram", path="example.L5X"
+        )
+        assert result["operand"] == "a_2d_array[1,2]"
+        assert result["node"]["kind"] == "scalar"
+        assert result["node"]["data_type"] == "SINT"
+
+    def test_multi_dimensional_wrong_rank(self, registry):
+        """A 2-D array indexed with one subscript is an error naming the dimensions."""
+        with pytest.raises(L5XError, match="dimension"):
+            get_tag(registry, "a_2d_array[1]", scope="MainProgram", path="example.L5X")
+
+    def test_multi_dimensional_out_of_bounds(self, registry):
+        """An out-of-range subscript in one dimension is an error."""
+        with pytest.raises(L5XError, match="out of bounds"):
+            get_tag(
+                registry, "a_2d_array[2,0]", scope="MainProgram", path="example.L5X"
+            )
+
+    def test_bit_out_of_range(self, registry):
+        """Bit numbers beyond the integer width are rejected."""
+        with pytest.raises(L5XError, match="out of range"):
+            get_tag(
+                registry, "a_commented_dint.32", scope="MainProgram", path="example.L5X"
+            )
+
+    def test_bit_on_bool_rejected(self, registry):
+        """BOOL values have no bits."""
+        with pytest.raises(L5XError, match="only integer types have bits"):
+            get_tag(registry, "a_bool.0", scope="MainProgram", path="example.L5X")
+
+    def test_runtime_index_uses_element_zero_with_note(self, registry):
+        """A non-literal index shows element 0 and says so in a note."""
+        result = get_tag(registry, "ALLOWABLE_ALARMS[idx]", path="example.L5X")
+        assert result["operand"] == "ALLOWABLE_ALARMS[idx]"
+        assert result["node"]["kind"] == "string"
+        assert "runtime index" in result["note"]
+
+    def test_alias_detail_has_no_value_tree(self, registry):
+        """An alias tag returns its target and no value tree."""
+        result = get_tag(
+            registry, "an_alias_tag", scope="MainProgram", path="example.L5X"
+        )
+        assert result["alias_for"] == "Local:1:I.Pt01.Data"
+        assert "value_tree" not in result
+
+    def test_alias_subpath_walks_target(self, registry):
+        """A sub-path on an alias is walked on the target, so it fails there."""
+        with pytest.raises(L5XError, match="Cannot access member 'Data'"):
+            get_tag(
+                registry, "an_alias_tag.Data", scope="MainProgram", path="example.L5X"
+            )
+
+    def test_program_prefix_selects_program(self, registry):
+        """An explicit \\Program. prefix selects that program's tag."""
+        result = get_tag(registry, "\\MainProgram.a_dint.2", path="example.L5X")
+        assert result["scope"] == "MainProgram"
+        assert result["operand"] == "a_dint.2"
+
+    def test_program_prefix_conflicting_scope(self, registry):
+        """A program prefix that disagrees with scope is an error."""
+        with pytest.raises(L5XError):
+            get_tag(
+                registry, "\\MainProgram.a_dint", scope="controller", path="example.L5X"
+            )
+
+
+class TestGetTagAliasesAndExpressions:
+    """Alias following and runtime-expression indexes through get_tag."""
+
+    def test_alias_without_subpath_shows_resolved_target(self, registry):
+        """An alias shows its own detail plus the resolved target operand and node."""
+        result = get_tag(
+            registry, "an_alias_tag", scope="MainProgram", path="example.L5X"
+        )
+        assert result["tag_type"] == "Alias"
+        assert result["alias_for"] == "Local:1:I.Pt01.Data"
+        assert result["alias_chain"] == ["Local:1:I.Pt01.Data"]
+        assert "value_tree" not in result
+        target = result["resolved_target"]
+        assert target["scope"] == "module_io"
+        assert target["operand"] == "Local:1:I.Pt01.Data"
+        assert target["node"]["data_type"] == "BOOL"
+
+    def test_alias_to_controller_tag_reports_controller_scope(self, registry):
+        """A program alias to a controller tag reports the controller target."""
+        result = get_tag(
+            registry, "reset_signal", scope="SafetyProgram", path="example.L5X"
+        )
+        assert result["alias_for"] == "fromNormal_reset"
+        assert result["resolved_target"]["scope"] == "controller"
+        assert result["resolved_target"]["operand"] == "fromNormal_reset"
+
+    def test_reserved_io_names_are_plain_names(self, fixtures_dir, tmp_path):
+        """A struct tag named io and a program named IO do not clash with module_io.
+
+        Uses a copy of example.L5X with a controller TIMER named ``io`` and a
+        program named ``IO`` (a copy of Unscheduled, so it holds one tag, nada).
+        """
+        reg = _reserved_registry(fixtures_dir, tmp_path)
+
+        io_tag = get_tag(reg, "io", path=RESERVED)
+        assert io_tag["scope"] == "controller"
+        assert io_tag["name"] == "io"
+        assert io_tag["data_type"] == "TIMER"
+
+        member = get_tag(reg, "io.PRE", path=RESERVED)
+        assert member["scope"] == "controller"
+        assert member["operand"] == "io.PRE"
+        assert member["node"]["kind"] == "scalar"
+
+        program_tags = list_tags(reg, scope="IO", path=RESERVED)
+        assert program_tags["scope"] == "IO"
+        assert [t["name"] for t in program_tags["tags"]] == ["nada"]
+
+        module_tags_result = list_tags(
+            reg, scope="module_io", limit=1000, path=RESERVED
+        )
+        assert module_tags_result["scope"] == "module_io"
+        assert module_tags_result["total"] == 32
+        assert "Local:2:I" in {t["name"] for t in module_tags_result["tags"]}
+
+        module_operand = get_tag(reg, "Local:2:I.Pt00.Data", path=RESERVED)
+        assert module_operand["scope"] == "module_io"
+        assert module_operand["operand"] == "Local:2:I.Pt00.Data"
+
+
+RESERVED = "reserved.L5X"
+
+
+def _reserved_registry(fixtures_dir, tmp_path):
+    """Write example.L5X plus a controller tag ``io`` and program ``IO`` to tmp_path."""
+    text = (fixtures_dir / "example.L5X").read_text(encoding="utf-8")
+
+    # Controller-scoped TIMER named "io": copy a_timer's block and rename it.
+    start = text.index('<Tag Name="a_timer"')
+    end = text.index("</Tag>", start) + len("</Tag>")
+    timer = text[start:end].replace('<Tag Name="a_timer"', '<Tag Name="io"', 1)
+    insert_at = text.rfind("</Tags>", 0, text.index("<Programs>"))
+    text = text[:insert_at] + timer + "\n" + text[insert_at:]
+
+    # Program named "IO": copy Unscheduled's block (it holds one tag, nada).
+    start = text.index('<Program Name="Unscheduled"')
+    end = text.index("</Program>", start) + len("</Program>")
+    program = text[start:end].replace(
+        '<Program Name="Unscheduled"', '<Program Name="IO"', 1
+    )
+    text = text[:end] + "\n" + program + text[end:]
+
+    (tmp_path / RESERVED).write_text(text, encoding="utf-8")
+    return ProjectRegistry(tmp_path)
+
+    def test_runtime_expression_index_has_note(self, registry):
+        """An expression index keeps its text and notes that element 0 is shown."""
+        result = get_tag(registry, "ALLOWABLE_ALARMS[idx+1]", path="example.L5X")
+        assert result["operand"] == "ALLOWABLE_ALARMS[idx+1]"
+        assert result["node"]["kind"] == "string"
+        assert "runtime index" in result["note"]

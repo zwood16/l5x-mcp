@@ -1,5 +1,6 @@
 """End-to-end tests: talk to the MCP server through a real MCP client."""
 
+import json
 import os
 import shutil
 import sys
@@ -14,6 +15,11 @@ from l5x_mcp.server import TOOLS, _strip_registry_doc, create_server
 
 pytestmark = pytest.mark.anyio
 
+LOGIC_CALL = (
+    "get_routine_logic",
+    {"routine": "Logic", "aoi": "Debounce", "path": "example.L5X"},
+)
+
 
 @pytest.fixture
 def anyio_backend():
@@ -23,6 +29,16 @@ def anyio_backend():
 @pytest.fixture
 def server(fixtures_dir):
     return create_server(ProjectRegistry(fixtures_dir))
+
+
+@pytest.fixture
+def structured_server(fixtures_dir):
+    return create_server(ProjectRegistry(fixtures_dir), structured_output=True)
+
+
+def _payload(result):
+    """Parse the single JSON text block of a tool result."""
+    return json.loads(result.content[0].text)
 
 
 async def test_lists_every_tool_with_clean_schema(server):
@@ -35,21 +51,62 @@ async def test_lists_every_tool_with_clean_schema(server):
         assert "registry:" not in (tool.description or "")
         assert tool.description, f"{tool.name} has no description"
         assert tool.annotations.read_only_hint is True
+        assert tool.output_schema is None
 
 
-async def test_call_tool_returns_structured_content(server):
+async def test_default_returns_one_compact_json_block(server):
     async with Client(server) as client:
-        result = await client.call_tool(
-            "get_routine_logic",
-            {"routine": "Logic", "aoi": "Debounce", "path": "example.L5X"},
-        )
+        result = await client.call_tool(*LOGIC_CALL)
 
     assert not result.is_error
-    data = result.structured_content
+    assert len(result.content) == 1
+    assert result.content[0].type == "text"
+    assert result.structured_content is None
+    text = result.content[0].text
+    assert "\n" not in text
+    data = json.loads(text)
+    assert text == json.dumps(data, separators=(",", ":"), ensure_ascii=False)
     assert data["file"] == "example.L5X"
     assert data["container"] == {"kind": "aoi", "name": "Debounce"}
     assert data["type"] == "RLL"
     assert data["rungs"]
+
+
+async def test_structured_mode_advertises_schema_and_content(structured_server):
+    async with Client(structured_server) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        result = await client.call_tool(*LOGIC_CALL)
+
+    assert tools["get_routine_logic"].output_schema is not None
+    assert not result.is_error
+    assert len(result.content) == 1
+    text = result.content[0].text
+    assert "\n" not in text
+    assert result.structured_content == json.loads(text)
+    assert result.structured_content["container"] == {"kind": "aoi", "name": "Debounce"}
+
+
+async def test_structured_mode_keeps_read_only_annotations(structured_server):
+    async with Client(structured_server) as client:
+        tools = (await client.list_tools()).tools
+
+    for tool in tools:
+        assert tool.annotations.read_only_hint is True
+        assert tool.output_schema is not None, tool.name
+
+
+@pytest.mark.parametrize("srv_fixture", ["server", "structured_server"])
+async def test_errors_reach_model_in_both_modes(request, srv_fixture):
+    srv = request.getfixturevalue(srv_fixture)
+    async with Client(srv) as client:
+        result = await client.call_tool(
+            "get_program", {"name": "nope", "path": "example.L5X"}
+        )
+
+    assert result.is_error
+    assert len(result.content) == 1
+    assert "Program 'nope' not found" in result.content[0].text
+    assert "MainProgram" in result.content[0].text
 
 
 async def test_user_errors_reach_the_model(server):
@@ -81,7 +138,7 @@ async def test_stdio_entrypoint(fixtures_dir):
         result = await client.call_tool("list_l5x_files", {})
 
     assert not result.is_error
-    paths = {f["path"] for f in result.structured_content["files"]}
+    paths = {f["path"] for f in _payload(result)["files"]}
     assert "example.L5X" in paths
 
 
@@ -112,8 +169,8 @@ async def test_stdio_discovers_client_directory(fixtures_dir, tmp_path, root_sou
         result = await client.call_tool("list_l5x_files", {})
 
     assert not result.is_error
-    assert Path(result.structured_content["root"]) == fixtures_dir.resolve()
-    assert "example.L5X" in {f["path"] for f in result.structured_content["files"]}
+    assert Path(_payload(result)["root"]) == fixtures_dir.resolve()
+    assert "example.L5X" in {f["path"] for f in _payload(result)["files"]}
 
 
 def test_parse_args_root_from_env(monkeypatch, tmp_path):
@@ -149,6 +206,30 @@ def test_parse_args_rejects_unresolved_root(monkeypatch, capsys, placeholder, so
 def test_explicit_root_overrides_unresolved_env(monkeypatch, tmp_path):
     monkeypatch.setenv("L5X_MCP_ROOT", "${workspaceFolder}")
     assert parse_args(["--root", str(tmp_path)]).root == str(tmp_path)
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "On", " on "])
+def test_structured_output_env_truthy(monkeypatch, value):
+    monkeypatch.setenv("L5X_MCP_STRUCTURED_OUTPUT", value)
+    assert parse_args([]).structured_output is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "", "maybe"])
+def test_structured_output_env_falsy(monkeypatch, value):
+    monkeypatch.setenv("L5X_MCP_STRUCTURED_OUTPUT", value)
+    assert parse_args([]).structured_output is False
+
+
+def test_structured_output_default_off(monkeypatch):
+    monkeypatch.delenv("L5X_MCP_STRUCTURED_OUTPUT", raising=False)
+    assert parse_args([]).structured_output is False
+
+
+def test_structured_output_flag_overrides_env(monkeypatch):
+    monkeypatch.delenv("L5X_MCP_STRUCTURED_OUTPUT", raising=False)
+    assert parse_args(["--structured-output"]).structured_output is True
+    monkeypatch.setenv("L5X_MCP_STRUCTURED_OUTPUT", "0")
+    assert parse_args(["--structured-output"]).structured_output is True
 
 
 def test_strip_registry_doc():

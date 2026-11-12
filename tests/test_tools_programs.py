@@ -1,14 +1,25 @@
 """Tests for programs tool module."""
 
 import json
+from pathlib import Path
 
 import pytest
 
-from l5x_mcp.registry import ItemNotFoundError, L5XError
+from l5x_mcp.operand_resolver import OperandResolver
+from l5x_mcp.registry import ItemNotFoundError, L5XError, ProjectRegistry
 from l5x_mcp.tools.programs import (
+    MAX_CHARS_DEFAULT,
+    VALUES_NOTE,
+    OutputBudget,
+    _Candidate,
+    _OperandLedger,
     _resolve_routine_container,
+    _rung_candidates,
+    _select_items,
+    _shrink_to_fit,
     get_program,
     get_routine_logic,
+    json_size,
     list_programs,
     list_routines,
 )
@@ -103,8 +114,10 @@ class TestGetProgram:
         assert "is_safety" in result
 
     def test_get_program_has_routines_and_tags(self, registry):
-        """Test that get_program includes routines and tags arrays."""
-        result = get_program(registry, "MainProgram", path="example.L5X")
+        """Test that get_program includes routines and, when asked, tags arrays."""
+        result = get_program(
+            registry, "MainProgram", include_tags=True, path="example.L5X"
+        )
         assert "routines" in result
         assert "tags" in result
         assert isinstance(result["routines"], list)
@@ -129,15 +142,20 @@ class TestGetProgram:
                 assert "rung_count" not in routine
 
     def test_get_program_tag_info(self, registry):
-        """Test tag info includes name, data_type, tag_type, usage."""
-        result = get_program(registry, "MainProgram", path="example.L5X")
+        """Tag info comes from tag_summary: name and data_type are always set."""
+        result = get_program(
+            registry, "MainProgram", include_tags=True, path="example.L5X"
+        )
         tags = result["tags"]
-        if tags:
-            tag = tags[0]
+        assert tags
+        for tag in tags:
             assert "name" in tag
-            assert "data_type" in tag
-            assert "tag_type" in tag
-            assert "usage" in tag
+            assert tag["tag_type"]
+        input_param = next(t for t in tags if t["name"] == "an_input_param")
+        assert input_param["tag_type"] == "Base"
+        assert input_param["usage"] == "Input"
+        # Empty values are omitted rather than emitted as ""
+        assert "description" not in input_param
 
     def test_get_program_case_insensitive(self, registry):
         """Test that program lookup is case-insensitive."""
@@ -380,9 +398,8 @@ class TestGetRoutineLogic:
         assert result["type"] == "ST"
         assert "total_lines" in result
         assert "lines" in result
-        assert "code" in result
+        assert "code" not in result
         assert isinstance(result["lines"], list)
-        assert isinstance(result["code"], str)
 
     def test_get_routine_logic_st_line_structure(self, registry):
         """Test that ST lines have proper structure."""
@@ -398,20 +415,16 @@ class TestGetRoutineLogic:
             assert "text" in line
             assert isinstance(line["number"], int)
 
-    def test_get_routine_logic_st_code_joined(self, registry):
-        """Test that ST code is properly joined from lines."""
+    def test_get_routine_logic_st_has_no_code_key(self, registry):
+        """ST lines are returned once; there is no duplicated joined 'code' key."""
         result = get_routine_logic(
             registry,
             routine="StructuredTextRoutine",
             program="AnotherProgram",
             path="example.L5X",
         )
-        lines = result["lines"]
-        code = result["code"]
-        # Code should contain text from lines
-        if lines:
-            # At least one line text should be in code
-            assert len(code) > 0
+        assert "code" not in result
+        assert [line["number"] for line in result["lines"]] == list(range(24))
 
     def test_get_routine_logic_st_range(self, registry):
         """Test ST line range filtering."""
@@ -650,3 +663,787 @@ class TestGetRoutineLogic:
         )
         assert result["routine"] == "Logic"
         assert result["container"]["name"] == "Debounce"
+
+
+class TestRoutineComponentExports:
+    """Routine and Rung component exports (program context wrapper)."""
+
+    def test_routine_export_auto_detects_program(self, registry):
+        """Routine export: the single context program is the container."""
+        result = list_routines(registry, path="SequenceRoutine_Routine_RLL.L5X")
+        assert result["container"] == {"kind": "program", "name": "MainProgram"}
+        assert [r["name"] for r in result["routines"]] == ["SequenceRoutine"]
+        assert result["routines"][0]["type"] == "RLL"
+        assert result["routines"][0]["rung_count"] == 10
+
+    def test_routine_export_get_routine_logic(self, registry):
+        """Routine export: rungs are readable with auto-detected container."""
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            path="SequenceRoutine_Routine_RLL.L5X",
+        )
+        assert result["type"] == "RLL"
+        assert result["total_rungs"] == 10
+        assert result["rungs"][0]["number"] == 0
+
+    def test_rung_export_type_inferred_from_rllcontent(self, registry):
+        """Rung export: the routine has no Type attribute but is RLL."""
+        listed = list_routines(registry, path="Rung2_from_SequenceRoutine.L5X")
+        assert listed["routines"][0]["type"] == "RLL"
+        assert listed["routines"][0]["rung_count"] == 1
+
+    def test_rung_export_get_routine_logic(self, registry):
+        """Rung export: the single target rung is returned, not 'unsupported'."""
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            path="Rung2_from_SequenceRoutine.L5X",
+        )
+        assert result["type"] == "RLL"
+        assert "note" not in result
+        assert result["total_rungs"] == 1
+        assert result["rungs"][0]["number"] == 2
+        assert result["rungs"][0]["text"] == "SeqCtrl(sequence,1,0);"
+
+
+def _compact_size(result: dict) -> int:
+    """Compact JSON size, as measured by the max_chars budget."""
+    return len(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
+
+
+def _all_items(registry, key, **kwargs):
+    """Follow next_start_rung until the routine is fully read; return items."""
+    items = []
+    start = 0
+    for _ in range(100):  # guard against a loop that never advances
+        result = get_routine_logic(registry, start_rung=start, **kwargs)
+        items.extend(result[key])
+        if not result.get("truncated"):
+            return items
+        assert result["next_start_rung"] > start
+        start = result["next_start_rung"]
+    raise AssertionError("pagination did not finish")
+
+
+class TestGetProgramTags:
+    """get_program omits the tag list by default."""
+
+    def test_default_omits_tags_and_hints_list_tags(self, registry):
+        result = get_program(registry, "MainProgram", path="example.L5X")
+        assert "tags" not in result
+        assert result["tag_count"] > 0
+        assert 'list_tags(scope="MainProgram")' in result["note"]
+
+    def test_include_tags_returns_full_list(self, registry):
+        result = get_program(
+            registry, "MainProgram", include_tags=True, path="example.L5X"
+        )
+        assert len(result["tags"]) == result["tag_count"]
+        assert "note" not in result
+
+
+class TestRoutineLogicDetail:
+    """The full, outline and logic detail modes of get_routine_logic."""
+
+    def test_full_rung_has_number_comment_and_text(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            start_rung=1,
+            end_rung=1,
+            path="example.L5X",
+        )
+        assert result["detail"] == "full"
+        rung = result["rungs"][0]
+        assert rung["number"] == 1
+        assert rung["comment"].startswith("//////////   Prescan")
+        assert rung["text"]
+
+    def test_outline_rung_has_number_and_comment_only(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="outline",
+            path="example.L5X",
+        )
+        assert [r["number"] for r in result["rungs"]] == list(range(10))
+        for rung in result["rungs"]:
+            assert set(rung) <= {"number", "comment"}
+        assert result["rungs"][1]["comment"].startswith("//////////   Prescan")
+
+    def test_outline_rung_without_comment_is_number_only(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="MainRoutine",
+            program="MainProgram",
+            detail="outline",
+            path="example.L5X",
+        )
+        assert result["rungs"] == [{"number": 0}]
+
+    def test_logic_rung_has_number_and_text_only(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert [r["number"] for r in result["rungs"]] == list(range(10))
+        for rung in result["rungs"]:
+            assert set(rung) == {"number", "text"}
+            assert rung["text"]
+
+    def test_logic_is_much_smaller_than_full(self, registry):
+        full = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            path="example.L5X",
+        )
+        logic = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert _compact_size(logic) * 4 < _compact_size(full)
+
+    def test_invalid_detail_lists_options(self, registry):
+        with pytest.raises(L5XError) as exc_info:
+            get_routine_logic(
+                registry,
+                routine="SequenceRoutine",
+                program="MainProgram",
+                detail="text",
+                path="example.L5X",
+            )
+        message = str(exc_info.value)
+        assert "'full'" in message
+        assert "'outline'" in message
+        assert "'logic'" in message
+
+    def test_st_full_lines_as_written(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="StructuredTextRoutine",
+            program="AnotherProgram",
+            path="example.L5X",
+        )
+        assert result["detail"] == "full"
+        assert result["lines"][0] == {"number": 0, "text": "(*"}
+        assert result["lines"][8]["text"] == "// loop here"
+
+    def test_st_outline_only_lines_with_comments(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="StructuredTextRoutine",
+            program="AnotherProgram",
+            detail="outline",
+            path="example.L5X",
+        )
+        # Lines 0-1, 3-4 and 6 are inside a multi-line (* ... *) block
+        assert [line["number"] for line in result["lines"]] == [
+            0,
+            1,
+            3,
+            4,
+            6,
+            8,
+            16,
+            19,
+            20,
+        ]
+        assert result["lines"][6]["text"] == "// multiline if"
+
+    def test_st_logic_strips_comments_and_keeps_line_numbers(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="StructuredTextRoutine",
+            program="AnotherProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        numbers = [line["number"] for line in result["lines"]]
+        assert 8 not in numbers  # "// loop here" is comment only
+        assert 9 in numbers
+        line_9 = next(line for line in result["lines"] if line["number"] == 9)
+        assert line_9["text"] == "j := 0;"
+        for line in result["lines"]:
+            assert line["text"]
+            assert "//" not in line["text"]
+            assert "(*" not in line["text"]
+
+    @pytest.mark.parametrize(
+        ("routine", "program"),
+        [
+            ("SequenceRoutine", "MainProgram"),
+            ("StructuredTextRoutine", "AnotherProgram"),
+        ],
+    )
+    @pytest.mark.parametrize("detail", ["full", "outline", "logic"])
+    def test_detail_modes_return_all_items_when_under_budget(
+        self, registry, routine, program, detail
+    ):
+        """Under the default budget nothing is cut and no resume keys appear."""
+        result = get_routine_logic(
+            registry,
+            routine=routine,
+            program=program,
+            detail=detail,
+            path="example.L5X",
+        )
+        assert "truncated" not in result
+        assert "next_start_rung" not in result
+        assert _compact_size(result) <= MAX_CHARS_DEFAULT
+
+
+class TestRoutineLogicBudget:
+    """The max_chars budget of get_routine_logic."""
+
+    @pytest.mark.parametrize(
+        ("routine", "program"),
+        [
+            ("SequenceRoutine", "MainProgram"),
+            ("StructuredTextRoutine", "AnotherProgram"),
+        ],
+    )
+    @pytest.mark.parametrize("detail", ["full", "outline", "logic"])
+    @pytest.mark.parametrize("max_chars", [1000, 2000, 8000])
+    def test_response_within_max_chars(
+        self, registry, routine, program, detail, max_chars
+    ):
+        result = get_routine_logic(
+            registry,
+            routine=routine,
+            program=program,
+            detail=detail,
+            max_chars=max_chars,
+            path="example.L5X",
+        )
+        assert _compact_size(result) <= max_chars
+
+    def test_truncation_reports_resume_point(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="outline",
+            max_chars=1000,
+            path="example.L5X",
+        )
+        assert result["truncated"] is True
+        assert result["returned_rungs"] == len(result["rungs"])
+        assert 0 < result["returned_rungs"] < 10
+        assert result["next_start_rung"] == result["rungs"][-1]["number"] + 1
+        assert "outline" in result["note"]
+        assert "start_rung" in result["note"]
+
+    def test_resume_from_next_start_rung_covers_all_rungs_once(self, registry):
+        numbers = [
+            rung["number"]
+            for rung in _all_items(
+                registry,
+                "rungs",
+                routine="SequenceRoutine",
+                program="MainProgram",
+                detail="outline",
+                max_chars=1000,
+                path="example.L5X",
+            )
+        ]
+        assert numbers == list(range(10))
+
+    def test_resume_st_lines_covers_all_lines_once(self, registry):
+        numbers = [
+            line["number"]
+            for line in _all_items(
+                registry,
+                "lines",
+                routine="StructuredTextRoutine",
+                program="AnotherProgram",
+                detail="full",
+                max_chars=1000,
+                path="example.L5X",
+            )
+        ]
+        assert numbers == list(range(24))
+
+    def test_single_oversized_rung_is_cut_and_flagged(self, registry):
+        full = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            start_rung=0,
+            end_rung=0,
+            path="example.L5X",
+        )["rungs"][0]["comment"]
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            start_rung=0,
+            end_rung=0,
+            max_chars=1000,
+            path="example.L5X",
+        )
+        assert len(result["rungs"]) == 1  # always at least one rung
+        rung = result["rungs"][0]
+        assert rung["comment_truncated"] is True
+        assert 0 < len(rung["comment"]) < len(full)
+        assert full.startswith(rung["comment"])
+        assert "text_truncated" not in rung
+        assert result["truncated"] is True
+        assert "next_start_rung" not in result  # nothing was omitted
+        assert _compact_size(result) <= 1000
+
+    def test_range_under_budget_is_not_truncated(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            start_rung=2,
+            end_rung=4,
+            max_chars=1000,
+            path="example.L5X",
+        )
+        assert [r["number"] for r in result["rungs"]] == [2, 3, 4]
+        assert "truncated" not in result
+
+    def test_cap_still_applies_with_budget(self, registry, monkeypatch):
+        import l5x_mcp.tools.programs as programs_module
+
+        monkeypatch.setattr(programs_module, "MAX_RUNGS_DEFAULT", 2)
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert len(result["rungs"]) == 2
+        assert result["returned_rungs"] == 2
+        assert result["next_start_rung"] == 2
+        assert "(cap)" in result["note"]
+
+    @pytest.mark.parametrize("max_chars", [999, 100001, 0, "8000", True, None])
+    def test_invalid_max_chars_rejected(self, registry, max_chars):
+        with pytest.raises(L5XError) as exc_info:
+            get_routine_logic(
+                registry,
+                routine="SequenceRoutine",
+                program="MainProgram",
+                max_chars=max_chars,
+                path="example.L5X",
+            )
+        assert "max_chars must be an integer from 1000 to 100000" in str(exc_info.value)
+
+    @pytest.mark.parametrize("max_chars", [1000, 100000])
+    def test_boundary_max_chars_accepted(self, registry, max_chars):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            max_chars=max_chars,
+            path="example.L5X",
+        )
+        assert _compact_size(result) <= max_chars
+
+
+class TestShrinkToFit:
+    """Cutting one oversized item so it fits the budget."""
+
+    def _budget(self, max_chars):
+        return OutputBudget(base_size=json_size({"rungs": []}), max_chars=max_chars)
+
+    def test_comment_then_text_are_cut(self):
+        budget = self._budget(1000)
+        item = {"number": 3, "comment": "c" * 2000, "text": "t" * 2000}
+        cut = _shrink_to_fit(item, budget)
+        assert cut["number"] == 3
+        assert cut["comment_truncated"] is True
+        assert cut["text_truncated"] is True
+        assert budget.fits(json_size(cut))
+
+    def test_text_only_item_is_cut(self):
+        budget = self._budget(1000)
+        cut = _shrink_to_fit({"number": 0, "text": "t" * 5000}, budget)
+        assert cut["text_truncated"] is True
+        assert "comment_truncated" not in cut
+        assert 0 < len(cut["text"]) < 5000
+        assert budget.fits(json_size(cut))
+
+    def test_cut_is_longest_prefix_that_fits(self):
+        budget = self._budget(1000)
+        cut = _shrink_to_fit({"number": 0, "text": "t" * 5000}, budget)
+        longer = {
+            "number": 0,
+            "text": "t" * (len(cut["text"]) + 1),
+            "text_truncated": True,
+        }
+        assert not budget.fits(json_size(longer))
+
+    def test_comment_only_item_keeps_text_key_absent(self):
+        budget = self._budget(1000)
+        cut = _shrink_to_fit({"number": 5, "comment": "c" * 5000}, budget)
+        assert cut["comment_truncated"] is True
+        assert "comment" in cut and 0 < len(cut["comment"]) < 5000
+        assert "text" not in cut
+        assert budget.fits(json_size(cut))
+
+
+LONG_DESCRIPTION = "abcdefghij" * 2000  # 20000 chars, prefixes are identifiable
+
+
+def _set_description(registry, monkeypatch, program, routine, text):
+    """Give a fixture routine a description for this test only (restored after)."""
+    _, project = registry.get_with_path("example.L5X")
+    rtn = project.programs[program].routines[routine]
+    monkeypatch.setattr(rtn, "description", text)
+
+
+class TestDescriptionBudget:
+    """The routine description counts toward max_chars and is cut if needed."""
+
+    def test_short_description_is_untouched(self, registry, monkeypatch):
+        _set_description(
+            registry, monkeypatch, "MainProgram", "SequenceRoutine", "Short."
+        )
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert result["description"] == "Short."
+        assert "description_truncated" not in result
+
+    def test_long_description_is_cut_to_a_prefix_and_flagged(
+        self, registry, monkeypatch
+    ):
+        _set_description(
+            registry, monkeypatch, "MainProgram", "SequenceRoutine", LONG_DESCRIPTION
+        )
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            max_chars=1000,
+            path="example.L5X",
+        )
+        assert result["description_truncated"] is True
+        assert 0 < len(result["description"]) < len(LONG_DESCRIPTION)
+        assert LONG_DESCRIPTION.startswith(result["description"])
+        assert _compact_size(result) <= 1000
+        assert len(result["rungs"]) >= 1
+
+    @pytest.mark.parametrize("detail", ["full", "outline", "logic"])
+    def test_huge_description_still_within_budget_with_items(
+        self, registry, monkeypatch, detail
+    ):
+        """Even a description far over budget leaves room for an item."""
+        _set_description(
+            registry, monkeypatch, "MainProgram", "SequenceRoutine", LONG_DESCRIPTION
+        )
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail=detail,
+            max_chars=1000,
+            path="example.L5X",
+        )
+        assert result["description_truncated"] is True
+        assert _compact_size(result) <= 1000
+        assert len(result["rungs"]) >= 1
+        assert result["truncated"] is True
+
+    def test_huge_st_description_within_budget(self, registry, monkeypatch):
+        _set_description(
+            registry,
+            monkeypatch,
+            "AnotherProgram",
+            "StructuredTextRoutine",
+            LONG_DESCRIPTION,
+        )
+        result = get_routine_logic(
+            registry,
+            routine="StructuredTextRoutine",
+            program="AnotherProgram",
+            detail="full",
+            max_chars=1000,
+            path="example.L5X",
+        )
+        assert result["description_truncated"] is True
+        assert _compact_size(result) <= 1000
+        assert len(result["lines"]) >= 1
+
+
+FIXTURE_FILE = Path(__file__).parent / "fixtures" / "example.L5X"
+
+
+class TestRoutineOperands:
+    """The operands map of get_routine_logic (include_operands / include_values)."""
+
+    def test_operands_present_by_default(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        entry = result["operands"]["sequence.currentStep"]
+        assert entry["desc"] == "Active Step Number"
+        assert entry["type"] == "DINT"
+        assert "value" not in entry  # values are off by default
+        assert "values_note" not in result
+
+    def test_include_operands_false_omits_map(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            include_operands=False,
+            path="example.L5X",
+        )
+        assert "operands" not in result
+        assert len(result["rungs"]) == 10
+
+    def test_outline_has_no_operands(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="outline",
+            path="example.L5X",
+        )
+        assert "operands" not in result
+        assert "operands_unparsed" not in result
+
+    def test_include_values_adds_values_and_note(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            include_values=True,
+            path="example.L5X",
+        )
+        assert result["operands"]["sequence.currentStep"]["value"] == 7000
+        assert result["values_note"] == VALUES_NOTE
+
+    def test_values_note_absent_when_no_value_is_shown(self, registry):
+        # Rung 2 references only the sequence structure, which has no scalar value
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            start_rung=2,
+            end_rung=2,
+            include_values=True,
+            path="example.L5X",
+        )
+        assert "values_note" not in result
+        assert all("value" not in e for e in result["operands"].values())
+
+    def test_include_values_requires_include_operands(self, registry):
+        with pytest.raises(L5XError, match="requires include_operands"):
+            get_routine_logic(
+                registry,
+                routine="SequenceRoutine",
+                program="MainProgram",
+                include_operands=False,
+                include_values=True,
+                path="example.L5X",
+            )
+
+    def test_constant_shows_value_from_a_program_reference(self, tmp_path):
+        """A_CONSTANT is unused in the fixture; add a reference in a copy."""
+        text = FIXTURE_FILE.read_text(encoding="utf-8")
+        old = "<![CDATA[JSR(SequenceRoutine,0);]]>"
+        assert text.count(old) >= 1
+        edited = text.replace(old, "<![CDATA[MOVE(A_CONSTANT,a_dint);]]>", 1)
+        (tmp_path / "edited.L5X").write_text(edited, encoding="utf-8")
+
+        result = get_routine_logic(
+            ProjectRegistry(tmp_path),
+            routine="MainRoutine",
+            program="MainProgram",
+            path="edited.L5X",
+        )
+        assert result["rungs"][0]["text"] == "MOVE(A_CONSTANT,a_dint);"
+        entry = result["operands"]["A_CONSTANT"]
+        assert entry["const"] is True
+        assert entry["value"] == 42
+        assert entry["desc"] == "the answer to life the universe and everything"
+        assert "values_note" not in result  # a constant is not a live value
+
+    def test_module_io_operand_has_module_scope(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="io",
+            program="AnotherProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        entry = result["operands"]["Local:1:I.Pt00.Data"]
+        assert entry["scope"] == "module_io"
+        assert entry["type"] == "BOOL"
+
+    def test_aoi_operand_described_from_operand_comment(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="Logic",
+            aoi="FanucRobot",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert result["operands"]["seq.fault.0"]["desc"] == (
+            "Robot fault did not reset when running"
+        )
+
+    def test_st_operands_come_from_comment_stripped_code(self, registry):
+        """Words inside comments are not operands; full and logic agree."""
+        full = get_routine_logic(
+            registry,
+            routine="StructuredTextRoutine",
+            program="AnotherProgram",
+            detail="full",
+            path="example.L5X",
+        )
+        logic = get_routine_logic(
+            registry,
+            routine="StructuredTextRoutine",
+            program="AnotherProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert full["operands"]["j"]["type"] == "DINT"
+        assert full["operands"] == logic["operands"]
+        assert "loop" not in full["operands"]
+
+    def test_unparsed_rung_is_listed_and_does_not_fail(self, registry, monkeypatch):
+        _, project = registry.get_with_path("example.L5X")
+        rung = project.programs["MainProgram"].routines["SequenceRoutine"].rungs[2]
+        monkeypatch.setattr(rung, "text", "EQ(sequence.currentStep,0")
+
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert result["operands_unparsed"] == [2]
+        assert [r["number"] for r in result["rungs"]] == list(range(10))
+        assert result["rungs"][2]["text"] == "EQ(sequence.currentStep,0"
+
+    def test_operands_map_only_covers_returned_rungs(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="SequenceRoutine",
+            program="MainProgram",
+            detail="full",
+            max_chars=2000,
+            path="example.L5X",
+        )
+        assert result["truncated"] is True
+        assert 0 < len(result["rungs"]) < 10
+        expected: set[str] = set()
+        for rung in result["rungs"]:
+            single = get_routine_logic(
+                registry,
+                routine="SequenceRoutine",
+                program="MainProgram",
+                detail="full",
+                start_rung=rung["number"],
+                end_rung=rung["number"],
+                path="example.L5X",
+            )
+            expected |= set(single.get("operands", {}))
+        assert set(result.get("operands", {})) == expected
+
+    @pytest.mark.parametrize(
+        ("routine", "program"),
+        [
+            ("SequenceRoutine", "MainProgram"),
+            ("StructuredTextRoutine", "AnotherProgram"),
+        ],
+    )
+    @pytest.mark.parametrize("detail", ["full", "logic"])
+    @pytest.mark.parametrize("max_chars", [1000, 2000, 8000])
+    def test_response_within_max_chars_with_operands(
+        self, registry, routine, program, detail, max_chars
+    ):
+        result = get_routine_logic(
+            registry,
+            routine=routine,
+            program=program,
+            detail=detail,
+            max_chars=max_chars,
+            include_values=True,
+            path="example.L5X",
+        )
+        assert _compact_size(result) <= max_chars
+
+    def test_resume_is_gapless_with_operands(self, registry):
+        numbers = [
+            rung["number"]
+            for rung in _all_items(
+                registry,
+                "rungs",
+                routine="SequenceRoutine",
+                program="MainProgram",
+                detail="logic",
+                max_chars=1000,
+                path="example.L5X",
+            )
+        ]
+        assert numbers == list(range(10))
+
+
+class TestOperandBudgetAccounting:
+    """Operand bookkeeping is charged exactly to the size budget."""
+
+    def test_budget_matches_serialized_size(self, registry):
+        """The running size equals the size of the serialized response."""
+        _, project = registry.get_with_path("example.L5X")
+        rtn = project.programs["MainProgram"].routines["SequenceRoutine"]
+        resolver = OperandResolver(project, "program", "MainProgram")
+        budget = OutputBudget(json_size({"rungs": [], "operands": {}}), 10**6)
+
+        selection = _select_items(
+            _rung_candidates(rtn, "logic", 0, None, resolver), budget, 200
+        )
+        response = {"rungs": selection.items, "operands": selection.ledger.entries}
+        assert budget.size == json_size(response)
+
+    def test_shared_operand_is_charged_once(self):
+        ledger = _OperandLedger()
+        first = _Candidate(0, {"number": 0}, {"x": {"type": "DINT"}})
+        second = _Candidate(1, {"number": 1}, {"x": {"type": "DINT"}})
+        ledger.commit(ledger.plan(first, keep=True))
+        plan = ledger.plan(second, keep=True)
+        assert plan.delta == 0
+        assert plan.entries == {}
+
+    def test_first_item_operands_left_out_before_text_is_cut(self):
+        operands = {f"op{i}": {"desc": "d" * 100, "type": "DINT"} for i in range(20)}
+        cand = _Candidate(4, {"number": 4, "text": "x" * 50}, operands)
+        budget = OutputBudget(json_size({"rungs": [], "operands": {}}), 1000)
+
+        selection = _select_items(iter([cand]), budget, 200)
+        assert selection.items == [{"number": 4, "text": "x" * 50}]
+        assert selection.ledger.omitted == [4]
+        assert selection.ledger.entries == {}
+        assert selection.content_truncated is False
+        assert json_size({"rungs": selection.items}) <= 1000

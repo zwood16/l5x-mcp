@@ -225,3 +225,25 @@ class TestDataTypeComponent:
         data_types = result["data_types"]
         # Should be empty or minimal
         assert len(data_types) <= 2  # Usually just system types
+
+    def test_get_data_type_user_udt_component_export(self, registry):
+        """UDT component export (A_UDT_DataType.L5X) returns the target UDT."""
+        result = get_data_type(registry, "A_UDT", path="A_UDT_DataType.L5X")
+        assert result["name"] == "A_UDT"
+        assert result["family"] == "NoFamily"
+        assert result["class"] == "User"
+        assert "is_string" not in result
+        assert result["tag_count"] == 0
+        assert result["members"]
+
+    def test_get_data_type_string_component_export(self, registry):
+        """STRING-family component export reports max_length and is_string."""
+        result = get_data_type(
+            registry,
+            "robotAlarmCode",
+            path="robotAlarmCode_DataType_String.L5X",
+        )
+        assert result["family"] == "StringFamily"
+        assert result["is_string"] is True
+        assert result["max_length"] == 8
+        assert result["used_by"] == []

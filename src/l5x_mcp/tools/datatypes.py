@@ -198,16 +198,12 @@ def get_data_type(
 
     result["used_by"] = sorted(used_by_set)
 
-    # Count tags: scan controller and program tags
-    tag_count = 0
-    for tag in project.tags.values():
-        if tag.data_type == dt.name:
-            tag_count += 1
-
+    # Count tags: controller tags and program tags (module I/O tags excluded)
+    tag_count = sum(
+        1 for tag in project.controller_tags.values() if tag.data_type == dt.name
+    )
     for prog in project.programs.values():
-        for tag in prog.tags.values():
-            if tag.data_type == dt.name:
-                tag_count += 1
+        tag_count += sum(1 for tag in prog.tags.values() if tag.data_type == dt.name)
 
     result["tag_count"] = tag_count
 

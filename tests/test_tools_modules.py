@@ -1,4 +1,4 @@
-"""Tests for l5x_mcp.tools.modules."""
+"""Tests for l5x_mcp.tools.modules against the refreshed example.L5X fixture."""
 
 from __future__ import annotations
 
@@ -9,11 +9,58 @@ import pytest
 from l5x_mcp.registry import ItemNotFoundError, ProjectRegistry
 from l5x_mcp.tools.modules import get_module, list_modules
 
+#: Expected tree text, derived from the fixture's real topology.
+#: ValveBank has no CatalogNumber in the fixture, so its brackets are omitted.
+EXPECTED_TREE = """\
+Local [5069-L310ERMS3] @ slot 0
+  Test_Input_Module [5069-IB16/A] @ slot 1
+  Test_Safety_Input [5069-IB8S/A] @ slot 2
+  Fast_Local_Input [5069-IB16F/A] @ slot 3
+  ShopRobot [ETHERNET-MODULE] @ 192.168.0.3
+  AnotherPLC [5069-L306ER] @ 192.168.1.4
+  ValveBank @ 192.168.1.5
+  Test_Servo_Drive [2198-H003-ERS2] @ 192.168.1.6
+  PointIO [1734-AENTR/B] @ 192.168.1.7
+    PointIO_Input [1734-IB8/C] @ slot 1
+    PointIO_Output [1734-OB8/C] @ slot 2
+    PointIO_AnalogInput [1734-IE2V/C] @ slot 3
+    PointIO_AnalogOutput [1734-OE2V/C] @ slot 4
+    PointIO_SafetyInput [1734-IB8S/B] @ slot 5
+    PointIO_SafetyOutput [1734-OB8S/B] @ slot 6
+  Compact5000_IO_Adapter [5069-AENTR] @ 192.168.1.8
+    Remote_Output [5069-OB16/B] @ slot 1"""
+
+#: Expected tag_prefix for every module in the fixture.
+EXPECTED_TAG_PREFIX = {
+    "Local": "Local",
+    "Test_Input_Module": "Local:1",
+    "Test_Safety_Input": "Local:2",
+    "Fast_Local_Input": "Local:3",
+    "ShopRobot": "ShopRobot",
+    "AnotherPLC": "AnotherPLC",
+    "ValveBank": "ValveBank",
+    "Test_Servo_Drive": "Test_Servo_Drive",
+    "PointIO": "PointIO",
+    "PointIO_Input": "PointIO:1",
+    "PointIO_Output": "PointIO:2",
+    "PointIO_AnalogInput": "PointIO:3",
+    "PointIO_AnalogOutput": "PointIO:4",
+    "PointIO_SafetyInput": "PointIO:5",
+    "PointIO_SafetyOutput": "PointIO:6",
+    "Compact5000_IO_Adapter": "Compact5000_IO_Adapter",
+    "Remote_Output": "Compact5000_IO_Adapter:1",
+}
+
 
 @pytest.fixture
 def fixture_registry(registry: ProjectRegistry) -> ProjectRegistry:
     """Return the session registry pointing to fixtures."""
     return registry
+
+
+def _modules_by_name(result: dict) -> dict[str, dict]:
+    """Index list_modules output by module name."""
+    return {m["name"]: m for m in result["modules"]}
 
 
 class TestListModules:
@@ -26,148 +73,95 @@ class TestListModules:
         assert "file" in result
         assert result["file"] == "example.L5X"
 
-    def test_list_modules_has_modules_key(self, fixture_registry):
-        """list_modules includes 'modules' key with list."""
+    def test_list_modules_has_all_seventeen_modules(self, fixture_registry):
+        """Every module in the refreshed fixture is listed."""
         result = list_modules(fixture_registry, path="example.L5X")
-        assert "modules" in result
-        assert isinstance(result["modules"], list)
-        assert len(result["modules"]) > 0
+        assert set(_modules_by_name(result)) == set(EXPECTED_TAG_PREFIX)
+        assert len(result["modules"]) == 17
 
-    def test_list_modules_has_tree_key(self, fixture_registry):
-        """list_modules includes 'tree' key with indented text."""
+    def test_tree_text_matches_topology(self, fixture_registry):
+        """The tree matches the fixture topology exactly."""
         result = list_modules(fixture_registry, path="example.L5X")
-        assert "tree" in result
-        assert isinstance(result["tree"], str)
-        assert "Local" in result["tree"]
-        assert "5069-L310ERMS3" in result["tree"]
+        assert result["tree"] == EXPECTED_TREE
 
-    def test_list_modules_tree_contains_all_modules(self, fixture_registry):
-        """Tree view includes all modules in the project (each exactly once)."""
+    def test_each_module_appears_once_in_tree(self, fixture_registry):
+        """Each module is rendered as exactly one tree line."""
+        result = list_modules(fixture_registry, path="example.L5X")
+        lines = [line.strip() for line in result["tree"].split("\n")]
+        # Name is the text before any " [" catalog or " @" address.
+        names = [line.split(" [")[0].split(" @")[0] for line in lines]
+        for name in EXPECTED_TAG_PREFIX:
+            assert names.count(name) == 1, f"{name} not listed exactly once"
+        assert len(names) == len(EXPECTED_TAG_PREFIX)
+
+    def test_tree_omits_empty_catalog_brackets(self, fixture_registry):
+        """A module with no catalog number is rendered without empty brackets."""
+        result = list_modules(fixture_registry, path="example.L5X")
+        assert "ValveBank @ 192.168.1.5" in result["tree"]
+        assert "[]" not in result["tree"]
+
+    def test_remote_rack_nests_under_adapter(self, fixture_registry):
+        """Remote_Output is indented under Compact5000_IO_Adapter with slot 1."""
+        result = list_modules(fixture_registry, path="example.L5X")
+        lines = result["tree"].split("\n")
+        adapter = lines.index("  Compact5000_IO_Adapter [5069-AENTR] @ 192.168.1.8")
+        assert lines[adapter + 1] == "    Remote_Output [5069-OB16/B] @ slot 1"
+
+    def test_ethernet_devices_show_ip_in_tree(self, fixture_registry):
+        """Ethernet-attached modules show their IP address in the tree."""
         result = list_modules(fixture_registry, path="example.L5X")
         tree = result["tree"]
-        modules = result["modules"]
-        module_names = [m["name"] for m in modules]
+        assert "ShopRobot [ETHERNET-MODULE] @ 192.168.0.3" in tree
+        assert "Test_Servo_Drive [2198-H003-ERS2] @ 192.168.1.6" in tree
+        assert "PointIO [1734-AENTR/B] @ 192.168.1.7" in tree
 
-        for name in module_names:
-            count = tree.count(name)
-            assert count == 1, (
-                f"Module {name} appears {count} times in tree (expected 1)"
-            )
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        sorted(EXPECTED_TAG_PREFIX.items()),
+    )
+    def test_tag_prefix_per_module(self, fixture_registry, name, expected):
+        """Each module reports the prefix of its I/O tag names."""
+        modules = _modules_by_name(list_modules(fixture_registry, path="example.L5X"))
+        assert modules[name]["tag_prefix"] == expected
 
     def test_list_modules_local_controller(self, fixture_registry):
-        """Local (controller) module is listed with correct catalog and slot 0."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
-
-        assert "Local" in modules
+        """Local (controller) is listed with its catalog and slot 0."""
+        modules = _modules_by_name(list_modules(fixture_registry, path="example.L5X"))
         local = modules["Local"]
         assert local["catalog_number"] == "5069-L310ERMS3"
         assert local["parent_module"] == "Local"  # Controller points to itself
         assert local["address"] == "slot 0"
 
     def test_list_modules_shop_robot_address(self, fixture_registry):
-        """ShopRobot has correct Ethernet address."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
-
-        assert "ShopRobot" in modules
+        """ShopRobot has its Ethernet address and parent port 3."""
+        modules = _modules_by_name(list_modules(fixture_registry, path="example.L5X"))
         shop = modules["ShopRobot"]
         assert shop["catalog_number"] == "ETHERNET-MODULE"
         assert shop["address"] == "192.168.0.3"
         assert shop["parent_module"] == "Local"
         assert shop["parent_port"] == "3"
 
-    def test_list_modules_test_input_module(self, fixture_registry):
-        """Test_Input_Module is nested on Local with correct address (slot 1)."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
+    def test_list_modules_remote_module_address(self, fixture_registry):
+        """Remote_Output's parent is the adapter and its address is its slot."""
+        modules = _modules_by_name(list_modules(fixture_registry, path="example.L5X"))
+        remote = modules["Remote_Output"]
+        assert remote["parent_module"] == "Compact5000_IO_Adapter"
+        assert remote["parent_port"] == "1"
+        assert remote["address"] == "slot 1"
 
-        assert "Test_Input_Module" in modules
-        test_input = modules["Test_Input_Module"]
-        assert test_input["catalog_number"] == "5069-IB16/A"
-        assert test_input["parent_module"] == "Local"
-        assert test_input["parent_port"] == "1"
-        assert test_input["address"] == "slot 1"
-
-    def test_list_modules_test_safety_input(self, fixture_registry):
-        """Test_Safety_Input has correct slot address."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
-
-        assert "Test_Safety_Input" in modules
-        safety = modules["Test_Safety_Input"]
-        assert safety["address"] == "slot 2"
-
-    def test_list_modules_valve_bank_address(self, fixture_registry):
-        """ValveBank has correct Ethernet address."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
-
-        assert "ValveBank" in modules
-        valve = modules["ValveBank"]
-        assert valve["address"] == "192.168.1.5"
-
-    def test_list_modules_test_servo_drive_address(self, fixture_registry):
-        """Test_Servo_Drive has correct Ethernet address."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
-
-        assert "Test_Servo_Drive" in modules
-        servo = modules["Test_Servo_Drive"]
-        assert servo["address"] == "192.168.1.6"
-
-    def test_list_modules_tree_format(self, fixture_registry):
-        """Tree output matches expected format (no duplicates, correct addresses)."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        tree = result["tree"]
-        lines = tree.split("\n")
-
-        # Should have at least 7 modules (Local + 6 children)
-        assert len(lines) >= 7, f"Tree has {len(lines)} lines, expected at least 7"
-
-        # Local should be first with slot 0
-        assert "Local [5069-L310ERMS3] @ slot 0" in tree
-
-        # Check critical modules with addresses
-        assert "Test_Input_Module [5069-IB16/A] @ slot 1" in tree
-        assert "Test_Safety_Input [5069-IB8S/A] @ slot 2" in tree
-        assert "ShopRobot [ETHERNET-MODULE] @ 192.168.0.3" in tree
-        assert "ValveBank [EX600-SEN7/8] @ 192.168.1.5" in tree
-        assert "Test_Servo_Drive [2198-H003-ERS2] @ 192.168.1.6" in tree
-        """All expected modules with correct catalog numbers."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        modules = {m["name"]: m for m in result["modules"]}
-
-        expected = {
-            "Local": "5069-L310ERMS3",
-            "Test_Input_Module": "5069-IB16/A",
-            "Test_Safety_Input": "5069-IB8S/A",
-            "ShopRobot": "ETHERNET-MODULE",
-            "AnotherPLC": "5069-L306ER",
-            "ValveBank": "EX600-SEN7/8",
-            "Test_Servo_Drive": "2198-H003-ERS2",
-        }
-
-        for name, catalog in expected.items():
-            assert name in modules, f"Module {name} not found"
-            assert modules[name]["catalog_number"] == catalog, (
-                f"Module {name} has wrong catalog: {modules[name]['catalog_number']}"
-            )
-
-    def test_list_modules_inhibited_only_when_true(self, fixture_registry):
-        """inhibited flag only present when True."""
+    def test_inhibited_only_when_true(self, fixture_registry):
+        """inhibited / major_fault keys only appear when True."""
         result = list_modules(fixture_registry, path="example.L5X")
         for mod in result["modules"]:
-            # Check that inhibited is not present or is True
             if "inhibited" in mod:
                 assert mod["inhibited"] is True
+            if "major_fault" in mod:
+                assert mod["major_fault"] is True
 
     def test_list_modules_json_serializable(self, fixture_registry):
         """Result is JSON serializable."""
         result = list_modules(fixture_registry, path="example.L5X")
-        # Should not raise
-        json_str = json.dumps(result)
-        assert len(json_str) > 0
+        assert len(json.dumps(result)) > 0
 
 
 class TestGetModule:
@@ -181,82 +175,116 @@ class TestGetModule:
         assert result["file"] == "example.L5X"
 
     def test_get_module_shoprobot_basic_info(self, fixture_registry):
-        """get_module ShopRobot returns correct basic info."""
+        """get_module ShopRobot returns identity, hierarchy and tag prefix."""
         result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
 
         assert result["name"] == "ShopRobot"
         assert result["catalog_number"] == "ETHERNET-MODULE"
+        assert result["revision"] == "1.1"
         assert result["parent_module"] == "Local"
         assert result["parent_port"] == "3"
         assert result["address"] == "192.168.0.3"
+        assert result["tag_prefix"] == "ShopRobot"
 
     def test_get_module_shoprobot_ports(self, fixture_registry):
-        """get_module ShopRobot has correct port info."""
+        """get_module ShopRobot has its Ethernet port marked upstream."""
         result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
 
-        assert "ports" in result
-        ports = result["ports"]
-        assert len(ports) > 0
-
-        # Port 2 should have the Ethernet address
-        port_2 = next((p for p in ports if p["id"] == 2), None)
-        assert port_2 is not None
+        port_2 = next(p for p in result["ports"] if p["id"] == 2)
         assert port_2["type"] == "Ethernet"
         assert port_2["address"] == "192.168.0.3"
         assert port_2["upstream"] is True
 
-    def test_get_module_shoprobot_communications(self, fixture_registry):
-        """get_module ShopRobot has communications section."""
+    def test_get_module_shoprobot_io_tag_names(self, fixture_registry):
+        """ShopRobot exposes its config, input and output tags by global name."""
         result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
 
-        assert "communications" in result
-        comms = result["communications"]
-        assert comms is not None
-        assert "connections" in comms
+        io_tags = result["io_tags"]
+        assert [t["name"] for t in io_tags] == [
+            "ShopRobot:C",
+            "ShopRobot:I",
+            "ShopRobot:O",
+        ]
+        assert [t["kind"] for t in io_tags] == ["C", "I", "O"]
 
-        # Should have at least one connection
-        connections = comms["connections"]
-        assert len(connections) > 0
+    def test_get_module_shoprobot_io_tag_connections(self, fixture_registry):
+        """Config tag has no connection; input and output belong to Standard."""
+        io_tags = {
+            t["name"]: t
+            for t in get_module(fixture_registry, "ShopRobot", path="example.L5X")[
+                "io_tags"
+            ]
+        }
+        assert "connection" not in io_tags["ShopRobot:C"]
+        assert io_tags["ShopRobot:I"]["connection"] == "Standard"
+        assert io_tags["ShopRobot:O"]["connection"] == "Standard"
 
-        # Check Standard connection
-        standard = next((c for c in connections if c["name"] == "Standard"), None)
-        assert standard is not None
+    def test_get_module_shoprobot_io_tag_summaries(self, fixture_registry):
+        """Without include_data, io tags give data_type and member/element summaries."""
+        io_tags = {
+            t["name"]: t
+            for t in get_module(fixture_registry, "ShopRobot", path="example.L5X")[
+                "io_tags"
+            ]
+        }
+        assert io_tags["ShopRobot:I"]["data_type"] == (
+            "AB:ETHERNET_MODULE_SINT_260Bytes:I:0"
+        )
+        assert io_tags["ShopRobot:I"]["members"] == ["Data"]
+        assert io_tags["ShopRobot:O"]["members"] == ["Data"]
+        assert io_tags["ShopRobot:C"]["element_count"] == 400
+        for tag in io_tags.values():
+            assert "value_tree" not in tag
+
+    def test_get_module_shoprobot_connection(self, fixture_registry):
+        """The Standard connection carries timing and sizes, and names its io tags."""
+        result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
+
+        assert result["communications"]["config_tag"] == "ShopRobot:C"
+        connections = result["communications"]["connections"]
+        assert len(connections) == 1
+        standard = connections[0]
+        assert standard["name"] == "Standard"
         assert standard["type"] == "Output"
         assert standard["rpi"] == 10000
         assert standard["unicast"] is True
+        assert standard["input_size"] == 260
+        assert standard["output_size"] == 52
+        assert standard["io_tags"] == ["ShopRobot:I", "ShopRobot:O"]
 
-    def test_get_module_shoprobot_input_output_tags(self, fixture_registry):
-        """get_module ShopRobot connection has input/output tags."""
-        result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
+    def test_get_module_connection_tags_are_not_duplicated(self, fixture_registry):
+        """Connections reference io tags by name and carry no tag data."""
+        result = get_module(
+            fixture_registry, "ShopRobot", include_data=True, path="example.L5X"
+        )
+        standard = result["communications"]["connections"][0]
+        assert all(isinstance(name, str) for name in standard["io_tags"])
+        assert "value_tree" not in standard
+        assert "data_type" not in standard
 
-        connections = result["communications"]["connections"]
-        standard = next(c for c in connections if c["name"] == "Standard")
-
-        assert "input_tag" in standard
-        assert standard["input_tag"] is not None
-        assert "data_type" in standard["input_tag"]
-
-        assert "output_tag" in standard
-        assert standard["output_tag"] is not None
-        assert "data_type" in standard["output_tag"]
+    def test_get_module_connection_refs_resolve_to_io_tags(self, fixture_registry):
+        """Every connection's io_tags name is one of the module's io tags."""
+        for name in _all_module_names(fixture_registry):
+            result = get_module(fixture_registry, name, path="example.L5X")
+            io_names = {t["name"] for t in result.get("io_tags", [])}
+            comms = result.get("communications") or {}
+            refs = [comms.get("config_tag")]
+            for conn in comms.get("connections", []):
+                refs += conn.get("io_tags", [])
+            for ref in refs:
+                if ref is not None:
+                    assert ref in io_names, f"{name}: {ref} not in io_tags"
 
     def test_get_module_without_include_data(self, fixture_registry):
-        """Without include_data, tags show data_type but no value_tree."""
+        """Without include_data, io tags have no value_tree."""
         result = get_module(
             fixture_registry, "ShopRobot", include_data=False, path="example.L5X"
         )
-
-        connections = result["communications"]["connections"]
-        standard = next(c for c in connections if c["name"] == "Standard")
-
-        # Should have data_type
-        assert "data_type" in standard["input_tag"]
-
-        # Should NOT have value_tree
-        assert "value_tree" not in standard["input_tag"]
+        for tag in result["io_tags"]:
+            assert "value_tree" not in tag
 
     def test_get_module_with_include_data(self, fixture_registry):
-        """With include_data, tags include value_tree."""
+        """With include_data, every io tag carries a value_tree."""
         result = get_module(
             fixture_registry,
             "ShopRobot",
@@ -265,15 +293,30 @@ class TestGetModule:
             max_elements=32,
             path="example.L5X",
         )
+        for tag in result["io_tags"]:
+            assert "value_tree" in tag
+            assert "kind" in tag["value_tree"]
+            assert "data_type" in tag["value_tree"]
 
-        connections = result["communications"]["connections"]
-        standard = next(c for c in connections if c["name"] == "Standard")
+        input_tree = next(
+            t["value_tree"] for t in result["io_tags"] if t["name"] == "ShopRobot:I"
+        )
+        assert input_tree["kind"] == "structure"
+        assert "Data" in input_tree["members"]
 
-        # Should have value_tree
-        assert "value_tree" in standard["input_tag"]
-        value_tree = standard["input_tag"]["value_tree"]
-        assert "kind" in value_tree
-        assert "data_type" in value_tree
+    def test_get_module_value_tree_for_every_module_with_io_tags(
+        self, fixture_registry
+    ):
+        """include_data gives a value_tree for every io tag of every module."""
+        checked = 0
+        for name in _all_module_names(fixture_registry):
+            result = get_module(
+                fixture_registry, name, include_data=True, path="example.L5X"
+            )
+            for tag in result.get("io_tags", []):
+                assert "value_tree" in tag, f"{name} {tag['name']} has no value_tree"
+                checked += 1
+        assert checked > 0
 
     def test_get_module_local_controller(self, fixture_registry):
         """get_module Local (controller) works correctly."""
@@ -284,34 +327,57 @@ class TestGetModule:
         assert result["parent_module"] == "Local"
         assert result["parent_port"] == "1"
         assert result["address"] == "slot 0"
+        assert result["tag_prefix"] == "Local"
+        assert "io_tags" not in result  # Controller has no I/O tags
 
     def test_get_module_local_children(self, fixture_registry):
-        """get_module Local lists all child modules."""
+        """get_module Local lists all direct child modules."""
         result = get_module(fixture_registry, "Local", path="example.L5X")
 
-        assert "children" in result
-        children = result["children"]
-        expected_children = {
-            "Test_Input_Module",
-            "Test_Safety_Input",
-            "ShopRobot",
-            "AnotherPLC",
-            "ValveBank",
-            "Test_Servo_Drive",
-        }
-        assert set(children) == expected_children
+        assert result["children"] == sorted(
+            [
+                "Test_Input_Module",
+                "Test_Safety_Input",
+                "Fast_Local_Input",
+                "ShopRobot",
+                "AnotherPLC",
+                "ValveBank",
+                "Test_Servo_Drive",
+                "PointIO",
+                "Compact5000_IO_Adapter",
+            ]
+        )
+
+    def test_get_module_adapter_children(self, fixture_registry):
+        """A remote adapter lists its remote rack module as a child."""
+        result = get_module(
+            fixture_registry, "Compact5000_IO_Adapter", path="example.L5X"
+        )
+        assert result["children"] == ["Remote_Output"]
+        assert result["tag_prefix"] == "Compact5000_IO_Adapter"
 
     def test_get_module_test_input_module(self, fixture_registry):
-        """get_module Test_Input_Module works correctly."""
+        """get_module Test_Input_Module has io tags on local slot 1."""
         result = get_module(fixture_registry, "Test_Input_Module", path="example.L5X")
 
         assert result["name"] == "Test_Input_Module"
         assert result["catalog_number"] == "5069-IB16/A"
+        assert result["tag_prefix"] == "Local:1"
+        assert [t["name"] for t in result["io_tags"]] == [
+            "Local:1:C",
+            "Local:1:I",
+        ]
 
-        # Should have communications
-        assert "communications" in result
-        comms = result["communications"]
-        assert comms is not None
+    def test_get_module_remote_io_tag_names(self, fixture_registry):
+        """Remote rack module I/O tags use the adapter-and-slot prefix."""
+        result = get_module(fixture_registry, "Remote_Output", path="example.L5X")
+
+        assert result["tag_prefix"] == "Compact5000_IO_Adapter:1"
+        assert [t["name"] for t in result["io_tags"]] == [
+            "Compact5000_IO_Adapter:1:C",
+            "Compact5000_IO_Adapter:1:I",
+            "Compact5000_IO_Adapter:1:O",
+        ]
 
     def test_get_module_case_insensitive(self, fixture_registry):
         """get_module lookup is case-insensitive."""
@@ -325,110 +391,55 @@ class TestGetModule:
         with pytest.raises(ItemNotFoundError):
             get_module(fixture_registry, "NonexistentModule", path="example.L5X")
 
-    def test_get_module_all_modules_include_data_true(self, fixture_registry):
-        """Every module works with include_data=True."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        for mod in result["modules"]:
-            name = mod["name"]
-            # Should not raise
-            mod_detail = get_module(
-                fixture_registry, name, include_data=True, path="example.L5X"
+    @pytest.mark.parametrize("include_data", [True, False])
+    def test_get_module_all_modules(self, fixture_registry, include_data):
+        """Every module works with include_data True and False, and is JSON-safe."""
+        names = _all_module_names(fixture_registry)
+        assert len(names) == 17
+        for name in names:
+            detail = get_module(
+                fixture_registry,
+                name,
+                include_data=include_data,
+                path="example.L5X",
             )
-            assert mod_detail["name"] == name
-
-    def test_get_module_all_modules_include_data_false(self, fixture_registry):
-        """Every module works with include_data=False."""
-        result = list_modules(fixture_registry, path="example.L5X")
-        for mod in result["modules"]:
-            name = mod["name"]
-            # Should not raise
-            mod_detail = get_module(
-                fixture_registry, name, include_data=False, path="example.L5X"
-            )
-            assert mod_detail["name"] == name
+            assert detail["name"] == name
+            assert detail["tag_prefix"] == EXPECTED_TAG_PREFIX[name]
+            assert len(json.dumps(detail)) > 0
 
     def test_get_module_json_serializable(self, fixture_registry):
         """Result is JSON serializable."""
         result = get_module(
             fixture_registry, "ShopRobot", include_data=True, path="example.L5X"
         )
-        # Should not raise
-        json_str = json.dumps(result)
-        assert len(json_str) > 0
-
-    def test_get_module_test_servo_drive(self, fixture_registry):
-        """get_module Test_Servo_Drive with multiple connections."""
-        result = get_module(fixture_registry, "Test_Servo_Drive", path="example.L5X")
-
-        assert result["name"] == "Test_Servo_Drive"
-        assert result["catalog_number"] == "2198-H003-ERS2"
-
-        # Should have communications with multiple connections
-        assert "communications" in result
-        comms = result["communications"]
-        connections = comms["connections"]
-        assert (
-            len(connections) >= 3
-        )  # AMotionDiagnostics, BMotionSync, CSafety_Output, DSafety_Input
+        assert len(json.dumps(result)) > 0
 
     def test_get_module_vendor_and_codes(self, fixture_registry):
-        """get_module includes vendor and product codes."""
+        """get_module includes vendor and product codes as strings."""
         result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
 
-        # These fields might be empty but should be present or compact()d away
-        assert "vendor" not in result or isinstance(result["vendor"], str)
-        assert "product_type" not in result or isinstance(result["product_type"], str)
-        assert "product_code" not in result or isinstance(result["product_code"], str)
-
-    def test_get_module_revision_format(self, fixture_registry):
-        """get_module revision is in major.minor format."""
-        result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
-
-        if "revision" in result:
-            assert isinstance(result["revision"], str)
-            # Should be like "1.1" if both major and minor present
-            if "." in result["revision"]:
-                parts = result["revision"].split(".")
-                assert len(parts) == 2
+        assert result["vendor"] == "1"
+        assert result["product_type"] == "0"
+        assert result["product_code"] == "18"
 
     def test_get_module_safety_enabled_field(self, fixture_registry):
-        """get_module includes safety_enabled if present."""
+        """Safety status is a bool when the module reports it."""
         result = get_module(fixture_registry, "Test_Safety_Input", path="example.L5X")
-
-        # safety_enabled might be present, None, or omitted
         if "safety_enabled" in result:
-            assert result["safety_enabled"] in [True, False, None]
+            assert isinstance(result["safety_enabled"], bool)
 
-    def test_get_module_ekey_state_field(self, fixture_registry):
-        """get_module includes ekey_state."""
-        result = get_module(fixture_registry, "ShopRobot", path="example.L5X")
-
-        # ekey_state might be empty or present
-        if "ekey_state" in result:
-            assert isinstance(result["ekey_state"], str)
-
-    def test_get_module_tag_member_names_without_data(self, fixture_registry):
-        """Without include_data, structure tags show member_names."""
-        result = get_module(
-            fixture_registry, "ShopRobot", include_data=False, path="example.L5X"
-        )
-
-        connections = result["communications"]["connections"]
-        standard = next(c for c in connections if c["name"] == "Standard")
-
-        # Input tag should show member_names if structure
-        input_tag = standard["input_tag"]
-        if input_tag and "member_names" in input_tag:
-            assert isinstance(input_tag["member_names"], list)
-
-    def test_get_module_port_with_bus_size(self, fixture_registry):
-        """get_module ports include bus_size when available."""
+    def test_get_module_ports_are_listed(self, fixture_registry):
+        """Ports carry id, type and upstream; bus_size is an int when present."""
         result = get_module(fixture_registry, "Local", path="example.L5X")
 
-        ports = result["ports"]
-        assert len(ports) > 0
-
-        # Ports might have bus_size or not
-        for port in ports:
+        assert len(result["ports"]) > 0
+        for port in result["ports"]:
+            assert isinstance(port["id"], int)
+            assert isinstance(port["type"], str)
             if "bus_size" in port:
-                assert port["bus_size"] is None or isinstance(port["bus_size"], int)
+                assert isinstance(port["bus_size"], int)
+
+
+def _all_module_names(registry: ProjectRegistry) -> list[str]:
+    """Return every module name in the fixture, in tree order."""
+    return [m["name"] for m in list_modules(registry, path="example.L5X")["modules"]]

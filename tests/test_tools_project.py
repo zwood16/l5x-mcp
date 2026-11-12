@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from conftest import EXAMPLE
 
 from l5x_mcp.tools.project import list_l5x_files, project_overview
@@ -13,19 +14,22 @@ class TestListL5xFiles:
     """Tests for list_l5x_files function."""
 
     def test_lists_all_fixtures(self, registry):
-        """list_l5x_files discovers all 4 fixture files."""
+        """list_l5x_files discovers all 9 fixture files."""
         result = list_l5x_files(registry)
 
         assert "root" in result
         assert "files" in result
         assert "file" not in result
-        assert len(result["files"]) == 4
+        assert len(result["files"]) == 9
 
         paths = {f["path"] for f in result["files"]}
         assert "example.L5X" in paths
         assert "simple_example.L5X" in paths
         assert "Debounce_AOI.L5X" in paths
         assert "MainProgram_Program.L5X" in paths
+        assert "ShopRobot_Module.L5X" in paths
+        assert "SequenceRoutine_Routine_RLL.L5X" in paths
+        assert "Rung2_from_SequenceRoutine.L5X" in paths
 
     def test_file_entry_structure(self, registry):
         """Each file entry has required keys."""
@@ -122,8 +126,9 @@ class TestProjectOverview:
         counts = result["counts"]
         assert counts["data_types"] == 9
         assert counts["aois"] == 6
-        assert counts["modules"] == 7
+        assert counts["modules"] == 17
         assert counts["controller_tags"] == 9
+        assert counts["module_io_tags"] == 32  # Names containing ':' in project.tags
         assert counts["programs"] == 7
         assert counts["tasks"] == 4
         assert counts["routines"] == 13  # Sum of routines across all programs
@@ -175,7 +180,7 @@ class TestProjectOverview:
         main_prog = next(p for p in programs if p["name"] == "MainProgram")
         assert main_prog["main_routine"] == "MainRoutine"
         assert main_prog["routine_count"] == 2
-        assert main_prog["tag_count"] == 34
+        assert main_prog["tag_count"] == 37
         assert "disabled" not in main_prog  # compact() removes False values
 
     def test_aois_with_revision(self, registry):
@@ -189,6 +194,8 @@ class TestProjectOverview:
         aoi_names = {a.split(" v")[0] for a in aois}  # Strip off revision
         assert "Debounce" in aoi_names
         assert "GenericInput" in aoi_names
+        assert "Debounce v1.2" in aois
+        assert "FanucRobot v1.4" in aois
 
     def test_data_types_list(self, registry):
         """Data types list contains all type names."""
@@ -204,7 +211,7 @@ class TestProjectOverview:
         result = project_overview(registry, EXAMPLE)
 
         modules = result["modules"]
-        assert len(modules) == 7
+        assert len(modules) == 17
 
         # Check Local module
         local = next((m for m in modules if m["name"] == "Local"), None)
@@ -249,7 +256,7 @@ class TestProjectOverview:
     def test_auto_discovery(self, registry):
         """project_overview with no path in single-file root works."""
         # This uses the registry which has exactly one file in this context
-        # Actually, registry.root points to fixtures which has 4 files,
+        # Actually, registry.root points to fixtures which has 9 files,
         # so this should fail. Let's test with explicit path instead.
         result = project_overview(registry, EXAMPLE)
         assert result["target_name"] == "Example_PLC"
@@ -311,3 +318,45 @@ class TestProjectOverviewInventory:
         assert safety["type"] == "PERIODIC"
         assert safety["rate"] == 20.0
         assert safety["programs"] == ["SafetyProgram"]
+
+
+class TestComponentExportOverview:
+    """project_overview works on every component export shape."""
+
+    @pytest.mark.parametrize(
+        ("filename", "target_type"),
+        [
+            ("Debounce_AOI.L5X", "AddOnInstructionDefinition"),
+            ("MainProgram_Program.L5X", "Program"),
+            ("A_UDT_DataType.L5X", "DataType"),
+            ("robotAlarmCode_DataType_String.L5X", "DataType"),
+            ("ShopRobot_Module.L5X", "Module"),
+            ("SequenceRoutine_Routine_RLL.L5X", "Routine"),
+            ("Rung2_from_SequenceRoutine.L5X", "Rung"),
+        ],
+    )
+    def test_overview_for_each_component(self, registry, filename, target_type):
+        """Each component export returns a context overview with counts."""
+        result = project_overview(registry, filename)
+
+        assert result["target_type"] == target_type
+        assert result["is_component_export"] is True
+        assert "controller" not in result  # None is dropped by compact()
+        assert set(result["counts"]) >= {"controller_tags", "module_io_tags"}
+        json.dumps(result)
+
+    def test_rung_export_omits_empty_target_name(self, registry):
+        """Rung exports have an empty TargetName, which compact() drops."""
+        result = project_overview(registry, "Rung2_from_SequenceRoutine.L5X")
+
+        assert "target_name" not in result
+        assert result["counts"]["routines"] == 1
+        assert result["aois"] == ["SeqCtrl v3.3"]
+
+    def test_module_export_counts_module_io_tags(self, registry):
+        """Module I/O tags of a module export are counted as module_io_tags."""
+        result = project_overview(registry, "ShopRobot_Module.L5X")
+
+        assert result["counts"]["modules"] == 1
+        assert result["counts"]["controller_tags"] == 0
+        assert result["counts"]["module_io_tags"] == 3

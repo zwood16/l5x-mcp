@@ -5,12 +5,9 @@ from __future__ import annotations
 import threading
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TypeVar
 
 from py_l5x import load
 from py_l5x.parsers.project import Project
-
-T = TypeVar("T")
 
 
 class L5XError(ValueError):
@@ -37,7 +34,7 @@ class ItemNotFoundError(L5XError):
     pass
 
 
-def lookup(collection: Mapping[str, T], name: str, kind: str) -> T:
+def lookup[T](collection: Mapping[str, T], name: str, kind: str) -> T:
     """Look up an item in a collection with exact or case-insensitive matching.
 
     Args:

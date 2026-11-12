@@ -10,7 +10,7 @@ This is a Model Context Protocol (MCP) server that exposes a read-only interface
 
 ## Requirements
 
-- Python 3.11 or later
+- Python 3.12 or later
 - [uv](https://github.com/astral-sh/uv) (Python package manager)
 
 The `py_l5x` parser is automatically downloaded from its GitHub release as a wheel via the `[tool.uv.sources]` configuration in `pyproject.toml` (source: https://github.com/zwood16/py_l5x).
@@ -185,42 +185,100 @@ Absolute tool `path` arguments still work independently of the discovery root.
 See the [VS Code MCP configuration reference](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)
 for client configuration formats, variables, and working-directory defaults.
 
+## Output format
+
+By default, every tool returns one compact JSON text block (no indentation or extra
+spaces).
+
+Add `--structured-output` to the server arguments, or set
+`L5X_MCP_STRUCTURED_OUTPUT=1` (also `true`, `yes`, or `on`), to also return MCP
+`structuredContent` and an output schema for each tool. The text block stays
+compact. Clients that do not use structured content can ignore it. Restart the
+server after changing this setting.
+
+VS Code (`.vscode/mcp.json` or user configuration), flag in `args`:
+
+```json
+{
+    "servers": {
+        "l5x-mcp": {
+            "type": "stdio",
+            "command": "uv",
+            "args": [
+                "run",
+                "--project",
+                "path/to/this/project",
+                "--no-sync",
+                "l5x-mcp",
+                "--structured-output"
+            ]
+        }
+    }
+}
+```
+
+GitHub Copilot CLI (`~/.copilot/mcp-config.json` or `.mcp.json`), flag set through `env`:
+
+```json
+{
+    "mcpServers": {
+        "l5x": {
+            "type": "local",
+            "command": "uv",
+            "args": [
+                "run",
+                "--project",
+                "path/to/this/project",
+                "--no-sync",
+                "l5x-mcp"
+            ],
+            "env": { "L5X_MCP_STRUCTURED_OUTPUT": "1" },
+            "tools": ["*"]
+        }
+    }
+}
+```
+
 ## Tools Reference
 
-| Tool Name             | Purpose                                                                                     | Key Arguments                                                                                                       |
-| --------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **list_l5x_files**    | Discover all .L5X files with metadata (size, mtime, target type)                            | `subdir=None`                                                                                                       |
-| **project_overview**  | Summarize project structure, controllers, tasks, programs, components                       | `path=None`                                                                                                         |
-| **list_tasks**        | List all tasks with type, rate, priority, scheduled programs                                | `path=None`                                                                                                         |
-| **get_task**          | Get detailed task info: description, type, rate, watchdog, event config, scheduled programs | `name`, `path=None`                                                                                                 |
-| **list_programs**     | List programs: main routine, disabled/safety flags, tag/routine counts, scheduled task      | `path=None`                                                                                                         |
-| **get_program**       | Get program details: description, routines, tags, disabled/test/safety flags                | `name`, `path=None`                                                                                                 |
-| **list_routines**     | List routines in a program or AOI with type and rung/line counts                            | `program=None`, `aoi=None`, `path=None`                                                                             |
-| **get_routine_logic** | Get RLL rungs or ST lines; supports range queries with pagination (max 200 per call)        | `routine`, `program=None`, `aoi=None`, `start_rung=None`, `end_rung=None`, `path=None`                              |
-| **list_tags**         | List controller or program tags with filtering by name, data type, tag type; paginated      | `scope='controller'`, `name_contains=None`, `data_type=None`, `tag_type=None`, `limit=100`, `offset=0`, `path=None` |
-| **get_tag**           | Get tag with full metadata; supports operand paths into nested structures/arrays/bits       | `name`, `scope=None`, `max_depth=3`, `max_elements=32`, `path=None`                                                 |
-| **list_data_types**   | List user-defined data types (UDTs) with member counts and string flags                     | `path=None`                                                                                                         |
-| **get_data_type**     | Get UDT members with metadata, which UDTs/AOIs use it, and how many tags have this type     | `name`, `path=None`                                                                                                 |
-| **list_aois**         | List Add-On Instructions with revision, parameter count, routine names                      | `path=None`                                                                                                         |
-| **get_aoi**           | Get AOI: parameters, local tags, routines, metadata; optionally include logic text          | `name`, `include_logic=False`, `path=None`                                                                          |
-| **list_modules**      | List I/O modules: addresses, hierarchy tree, slot/IP assignments                            | `path=None`                                                                                                         |
-| **get_module**        | Get module I/O structures: data, configuration, parent/child relationships                  | `name`, `include_data=False`, `max_depth=2`, `max_elements=32`, `path=None`                                         |
-| **find_references**   | Find all uses of a tag, instruction, or text in program and AOI logic                       | `query`, `kind='tag'`, `program=None`, `include_aois=True`, `limit=200`, `path=None`                                |
-| **instruction_usage** | Count instruction mnemonics used across all programs (or limit to one)                      | `program=None`, `path=None`                                                                                         |
+| Tool Name             | Purpose                                                                                                                                         | Key Arguments                                                                                                                                  |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **list_l5x_files**    | Discover .L5X files with size, mtime, target type and name                                                                                       | `subdir=None`                                                                                                                                  |
+| **project_overview**  | Summarize controller, tasks, programs, AOIs, UDTs, modules and counts (including `module_io_tags`)                                              | `path=None`                                                                                                                                    |
+| **list_tasks**        | List tasks with type, rate, priority, watchdog and scheduled programs                                                                            | `path=None`                                                                                                                                    |
+| **get_task**          | Get task detail: type, rate, watchdog, event info, scheduled programs                                                                            | `name`, `path=None`                                                                                                                            |
+| **list_programs**     | List programs: main routine, disabled/safety flags, routine and tag counts, scheduled task                                                      | `path=None`                                                                                                                                    |
+| **get_program**       | Get program detail: routines, flags, tag_count; the tag list only with `include_tags=True` (otherwise a hint to use `list_tags`)               | `name`, `include_tags=False`, `path=None`                                                                                                      |
+| **list_routines**     | List routines in a program or AOI with type and rung/line counts                                                                                 | `program=None`, `aoi=None`, `path=None`                                                                                                        |
+| **get_routine_logic** | Get RLL rungs or ST lines. `detail`: `full`, `outline` (comments only) or `logic` (code only). Returns an `operands` map. Paged by `max_chars` budget (max 200 per call) | `routine`, `program=None`, `aoi=None`, `start_rung=None`, `end_rung=None`, `detail='full'`, `max_chars=8000`, `include_operands=True`, `include_values=False`, `path=None` |
+| **list_tags**         | List tags in `scope`: `controller`, `module_io` (module I/O tags such as `Local:1:I`), or a program name; filter and paginate                    | `scope='controller'`, `name_contains=None`, `data_type=None`, `tag_type=None`, `limit=100`, `offset=0`, `path=None`                           |
+| **get_tag**           | Get a tag, or the value at an operand path: members, `[i]`/`[i,j]`, bits, module I/O names, `\Program.Tag`. Follows aliases                    | `name`, `scope=None`, `max_depth=3`, `max_elements=32`, `path=None`                                                                            |
+| **list_data_types**   | List user-defined data types (UDTs) with member counts and string flags                                                                         | `path=None`                                                                                                                                    |
+| **get_data_type**     | Get UDT members with metadata, which UDTs/AOIs use it, and how many tags have this type                                                         | `name`, `path=None`                                                                                                                            |
+| **list_aois**         | List Add-On Instructions with revision, parameter count and routine names                                                                       | `path=None`                                                                                                                                    |
+| **get_aoi**           | Get AOI parameters (with `operand_comments`), local tags, routines, instances; optionally logic text within a `max_chars` budget                | `name`, `include_logic=False`, `max_chars=8000`, `path=None`                                                                                   |
+| **list_modules**      | List I/O modules with `tag_prefix`, address, and a hierarchy `tree` (remote racks nested under their adapter)                                   | `path=None`                                                                                                                                    |
+| **get_module**        | Get module detail: identity, ports, communications, `io_tags` (global names such as `ShopRobot:I`), children                                    | `name`, `include_data=False`, `max_depth=2`, `max_elements=32`, `path=None`                                                                    |
+| **find_references**   | Find uses of a tag, instruction, or text in program and AOI logic. Comments are ignored for `tag`/`instruction` on ST                           | `query`, `kind='tag'` (`tag`/`instruction`/`text`), `program=None`, `include_aois=True`, `limit=200`, `path=None`                              |
+| **instruction_usage** | Count instruction mnemonics used across all programs (or limit to one)                                                                          | `program=None`, `path=None`                                                                                                                    |
 
 ## Suggested LLM workflow
 
 1. **Explore the project:** `list_l5x_files` → `project_overview`
 2. **Find relevant code:** `list_programs` / `list_routines`
-3. **Read logic:** `get_routine_logic` (paginate with `start_rung`/`end_rung` if needed; max 200 rungs per call)
-4. **Understand operands:** `get_tag`, `get_data_type`, `get_aoi` for any operands referenced in logic
-5. **Find cross-references:** `find_references` to see where a tag or instruction is used elsewhere
-6. **Analyze instructions:** `instruction_usage` to see which instructions are most common
+3. **Skim logic:** `get_routine_logic` with `detail="logic"` (cheapest) for a first pass
+4. **Read documentation:** `get_routine_logic` with `detail="outline"` for rung comments, or the default `detail="full"` for both. Follow `next_start_rung` when `truncated` is true.
+5. **Understand operands:** the `operands` map in `get_routine_logic` describes each operand. For more detail use `get_tag` (including operand paths), `get_data_type`, or `get_aoi`.
+6. **Find cross-references:** `find_references` for where a tag or instruction is used; `instruction_usage` for mnemonic counts
+7. **Module I/O:** `list_tags(scope="module_io")`, `get_module`, and `get_tag` with names such as `Local:1:I.Pt00.Data`
 
 ### Tips
 
-- **Operand paths:** `get_tag` supports paths into nested structures: `Tag.Member[3].1` accesses array element 3's bit 1 of a DINT member. See tool docstring for full syntax.
-- **Pagination:** `get_routine_logic` returns at most 200 rungs/lines per call. If truncated, use `next_start_rung` to continue.
+- **Operand paths:** `get_tag` resolves `Tag.Member[3].1` (element 3, bit 1 of a DINT member), multi-dimensional `[i,j]`, `\MainProgram.tag` for an explicit program, and module I/O names like `Local:1:I.Pt00.Data`. Alias tags report `alias_for`, `alias_chain`, and `resolved_target`.
+- **Output budget:** `get_routine_logic` bounds its whole response by `max_chars` (default 8000; 1000–100000). When output is cut it returns `truncated: true`, `returned_rungs`, and `next_start_rung`. Continue with `start_rung=next_start_rung`, use a narrower range, or raise `max_chars`. `include_operands=False` drops the operand map to save space. `get_aoi(include_logic=True)` also bounds its whole response by `max_chars`; routines that don't fit are listed in `logic_omitted`.
+- **Routine pagination:** `get_routine_logic` returns at most 200 rungs or lines per call (`start_rung`/`end_rung` are 0-based and inclusive).
+- **Current values:** `include_values=True` adds values of non-constant operands. These come from the offline snapshot saved in the export, not live data.
+- **Structured Text results:** ST results use the `lines` key in every `detail` mode. `outline` returns only the lines with comments; `logic` returns the code with comments removed.
 - **Tag pagination:** `list_tags` uses `limit`/`offset` for browsing large tag lists. Response includes `next_offset` when more tags remain.
 - **Instruction aliases:** `find_references` treats legacy/IEC mnemonic pairs as equivalent (e.g., MOV ↔ MOVE, EQU ↔ EQ, GRT ↔ GT, etc.).
 
@@ -240,18 +298,22 @@ uv run ruff check src tests
 uv run ruff format src tests
 ```
 
-Test fixtures in `tests/fixtures/` are sample exports copied from the py_l5x repository.
+Test fixtures in `tests/fixtures/` are 9 sample exports copied from the py_l5x repository,
+including component exports (AOI, program, routine, rung, module, data type).
 
 ### Project layout
 
 ```
 l5x-mcp/
 ├── src/l5x_mcp/
-│   ├── __init__.py           # CLI entry point and arg parsing
+│   ├── __init__.py           # CLI entry point and arg parsing (--root, --structured-output)
 │   ├── __main__.py           # Module runner
-│   ├── server.py             # MCPServer creation and tool registration
+│   ├── server.py             # MCPServer creation, tool registration, INSTRUCTIONS
 │   ├── registry.py           # Project discovery and caching
 │   ├── serialize.py          # JSON serialization helpers
+│   ├── operands.py           # Extract operand candidates from RLL rungs and ST lines
+│   ├── operand_resolver.py   # Resolve routine operands to descriptions, types and values
+│   ├── operand_paths.py      # Parse and resolve operand paths (get_tag and operands)
 │   └── tools/                # Tool implementations
 │       ├── project.py        # list_l5x_files, project_overview
 │       ├── tasks.py          # list_tasks, get_task

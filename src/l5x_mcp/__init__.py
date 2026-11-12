@@ -8,6 +8,12 @@ import re
 from collections.abc import Sequence
 
 ROOT_ENV_VAR = "L5X_MCP_ROOT"
+STRUCTURED_OUTPUT_ENV_VAR = "L5X_MCP_STRUCTURED_OUTPUT"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in _TRUTHY
 
 
 def _root_argument(value: str) -> str:
@@ -44,6 +50,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="stdio",
         help="MCP transport (default: stdio).",
     )
+    parser.add_argument(
+        "--structured-output",
+        action="store_true",
+        default=_env_flag(STRUCTURED_OUTPUT_ENV_VAR),
+        help=(
+            "Advertise output schemas and return results as structured_content in "
+            "addition to the compact JSON text block. "
+            f"Defaults to truthy {STRUCTURED_OUTPUT_ENV_VAR} (1/true/yes/on)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -53,4 +69,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     from l5x_mcp.registry import ProjectRegistry
     from l5x_mcp.server import create_server
 
-    create_server(ProjectRegistry(args.root)).run(transport=args.transport)
+    create_server(
+        ProjectRegistry(args.root), structured_output=args.structured_output
+    ).run(transport=args.transport)

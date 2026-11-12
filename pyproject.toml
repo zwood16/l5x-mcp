@@ -6,10 +6,10 @@ readme = "README.md"
 authors = [
     { name = "Zac Wood", email = "zwood@a-i-corp.com" }
 ]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
     "mcp[cli]>=2.3.0",
-    "py-l5x>=0.2.0",
+    "py-l5x>=0.3.1",
 ]
 
 [project.scripts]
@@ -20,7 +20,7 @@ requires = ["uv_build>=0.12.14,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-py-l5x = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.2.0/py_l5x-0.2.0-py3-none-any.whl" }
+py-l5x = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.3.1/py_l5x-0.3.1-py3-none-any.whl" }
 
 [tool.ruff]
 line-length = 88
@@ -37,7 +37,10 @@ select = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

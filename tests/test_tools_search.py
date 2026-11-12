@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,9 +13,113 @@ from l5x_mcp.tools.search import (
     _find_instruction_matches,
     _find_tag_matches,
     _find_text_matches,
+    _st_search_lines,
+    _strip_st_comments_per_line,
     find_references,
     instruction_usage,
 )
+
+
+class TestStripStComments:
+    """Unit tests for the ST comment stripper (line count and order preserved)."""
+
+    def test_line_comment_removed(self):
+        """A trailing // comment is removed and the code is right-stripped."""
+        assert _strip_st_comments_per_line(["x := 1;   // y := 2;"]) == ["x := 1;"]
+
+    def test_full_line_comment_becomes_empty(self):
+        """A line that is only a // comment becomes an empty string."""
+        assert _strip_st_comments_per_line(["// note", "x := 1;"]) == ["", "x := 1;"]
+
+    def test_leading_indentation_kept(self):
+        """Indentation of code lines is preserved."""
+        assert _strip_st_comments_per_line(["\t\tj := j+1;"]) == ["\t\tj := j+1;"]
+
+    def test_single_line_block_comment(self):
+        """A (* *) block inside one line is removed, code after it is kept."""
+        assert _strip_st_comments_per_line(["(* a := 1; *) b := 2;"]) == [" b := 2;"]
+
+    def test_block_comment_spanning_lines(self):
+        """Lines inside a multi-line block comment are blanked, count preserved."""
+        lines = ["(*", "  x := 1;", "*)", "y := 2;"]
+        assert _strip_st_comments_per_line(lines) == ["", "", "", "y := 2;"]
+
+    def test_block_comment_closing_mid_line_keeps_trailing_code(self):
+        """Code after the closing *) on the same line is kept."""
+        lines = ["IF a THEN (* start", "  comment *) b := 1;"]
+        assert _strip_st_comments_per_line(lines) == ["IF a THEN", " b := 1;"]
+
+    def test_apostrophe_inside_block_comment_does_not_open_string(self):
+        """A ' inside a comment must not swallow following code."""
+        lines = ["(* the robot's last *)", "x := 1;"]
+        assert _strip_st_comments_per_line(lines) == ["", "x := 1;"]
+
+    def test_slash_slash_inside_string_kept(self):
+        """// inside a string literal is not a comment."""
+        lines = ["msg := 'http://x'; // note"]
+        assert _strip_st_comments_per_line(lines) == ["msg := 'http://x';"]
+
+    def test_block_open_inside_string_kept(self):
+        """(* inside a string literal is not a comment."""
+        lines = ["s := '(* not a comment *)';"]
+        assert _strip_st_comments_per_line(lines) == ["s := '(* not a comment *)';"]
+
+    def test_escaped_quote_in_string(self):
+        """'' inside a string is an escaped quote, so the string continues."""
+        lines = ["s := 'it''s // ok'; // c"]
+        assert _strip_st_comments_per_line(lines) == ["s := 'it''s // ok';"]
+
+    def test_c_style_block_comment(self):
+        """/* */ block comments are removed."""
+        assert _strip_st_comments_per_line(["a := 1; /* hi */ b := 2;"]) == [
+            "a := 1;  b := 2;"
+        ]
+
+    def test_c_style_block_spanning_lines(self):
+        """/* */ blocks may also span lines."""
+        lines = ["/* start", "end */ c := 3;"]
+        assert _strip_st_comments_per_line(lines) == ["", " c := 3;"]
+
+    def test_unterminated_string_does_not_crash(self):
+        """An unterminated string runs to end of line without error."""
+        assert _strip_st_comments_per_line(["s := 'abc"]) == ["s := 'abc"]
+
+    def test_empty_input(self):
+        """No lines in, no lines out."""
+        assert _strip_st_comments_per_line([]) == []
+
+
+class TestStLineSearchSource:
+    """Unit tests for _st_search_lines (numbering and raw vs stripped text)."""
+
+    @staticmethod
+    def _routine(*pairs):
+        """Build a minimal stand-in for a py_l5x ST routine."""
+        return SimpleNamespace(
+            st_lines=[SimpleNamespace(number=n, text=t) for n, t in pairs]
+        )
+
+    def test_tag_and_instruction_use_stripped_text(self):
+        """Non-text kinds get comment-stripped code with original line numbers."""
+        routine = self._routine(
+            (0, "// XIC(old_tag)"),
+            (1, "(* MOV(a,b); *)"),
+            (5, "OTE(real_out); // OTE(x)"),
+        )
+        for kind in ("tag", "instruction"):
+            assert _st_search_lines(routine, kind) == [
+                (0, ""),
+                (1, ""),
+                (5, "OTE(real_out);"),
+            ]
+
+    def test_text_uses_raw_text(self):
+        """kind="text" keeps comments so prose can be found."""
+        routine = self._routine((0, "// loop here"), (1, "x := 1;"))
+        assert _st_search_lines(routine, "text") == [
+            (0, "// loop here"),
+            (1, "x := 1;"),
+        ]
 
 
 class TestFindTagMatches:
@@ -367,6 +472,110 @@ class TestFindReferences:
             # The debounceOffTimer.PRE destination should be write
             write_matches = [m for m in move_matches if m.get("usage") == "write"]
             assert len(write_matches) > 0
+
+
+class TestStComments:
+    """ST comments must not be reported by tag/instruction searches.
+
+    Uses real ST comments from the example.L5X fixture:
+    - AnotherProgram/StructuredTextRoutine: a 7-line (* *) block (lines 0-6)
+      with prose such as "Some indented text", and // comments on lines 8,
+      16, 19, 20.
+    - AOI FanucAlarmLookup/Logic: a (* *) block (lines 0-7) mentioning
+      recoverableAlarm (lines 1 and 6), plus // comments on lines 10 and 14.
+    """
+
+    @staticmethod
+    def _st_hits(result, container=None, routine=None):
+        """Return {line numbers} of ST matches, optionally filtered."""
+        return {
+            m["line"]
+            for m in result["matches"]
+            if m["routine_type"] == "ST"
+            and (container is None or m["container"] == container)
+            and (routine is None or m["routine"] == routine)
+        }
+
+    def test_identifier_only_in_comment_not_tag_match(self, registry):
+        """recoverableAlarm appears in comments (lines 1, 6) but only code matches."""
+        tag = find_references(
+            registry, query="recoverableAlarm", kind="tag", path="example.L5X"
+        )
+        assert self._st_hits(tag, "FanucAlarmLookup", "Logic") == {9, 17}
+
+        text = find_references(
+            registry, query="recoverableAlarm", kind="text", path="example.L5X"
+        )
+        assert {1, 6, 9, 17} <= self._st_hits(text, "FanucAlarmLookup", "Logic")
+
+    def test_comment_only_identifier_matched_by_text_kind(self, registry):
+        """The // comment word 'loop' is found by kind="text" but not kind="tag"."""
+        text = find_references(
+            registry,
+            query="loop",
+            kind="text",
+            program="AnotherProgram",
+            path="example.L5X",
+        )
+        assert 8 in self._st_hits(text, "AnotherProgram", "StructuredTextRoutine")
+
+        tag = find_references(
+            registry,
+            query="loop",
+            kind="tag",
+            program="AnotherProgram",
+            path="example.L5X",
+        )
+        assert self._st_hits(tag, "AnotherProgram", "StructuredTextRoutine") == set()
+
+    def test_block_comment_prose_spanning_lines_not_tag_match(self, registry):
+        """'some' appears in a multi-line (* *) block and a // comment only."""
+        tag = find_references(
+            registry,
+            query="some",
+            kind="tag",
+            program="AnotherProgram",
+            path="example.L5X",
+        )
+        assert self._st_hits(tag) == set()
+
+        text = find_references(
+            registry,
+            query="some",
+            kind="text",
+            program="AnotherProgram",
+            path="example.L5X",
+        )
+        assert self._st_hits(text, "AnotherProgram", "StructuredTextRoutine") == {
+            4,
+            19,
+        }
+
+    def test_st_line_numbers_match_source(self, registry):
+        """Tag matches report the original ST line numbers from the file."""
+        result = find_references(
+            registry,
+            query="j",
+            kind="tag",
+            program="AnotherProgram",
+            path="example.L5X",
+        )
+        hits = [
+            m
+            for m in result["matches"]
+            if m["routine_type"] == "ST" and m["routine"] == "StructuredTextRoutine"
+        ]
+        assert {m["line"] for m in hits} == {9, 12, 17, 18, 21}
+        by_line = {m["line"]: m["text"] for m in hits}
+        assert by_line[21] == "\tj:= 32;"
+        assert by_line[17] == "IF j <> 0 and"
+
+    def test_no_st_comment_line_matched_by_tag_across_project(self, registry):
+        """A word that only occurs in ST comments yields no ST tag matches."""
+        result = find_references(
+            registry, query="indented", kind="tag", path="example.L5X"
+        )
+        assert [m for m in result["matches"] if m["routine_type"] == "ST"] == []
 
 
 class TestTruncationLogic:

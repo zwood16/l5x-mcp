@@ -97,9 +97,9 @@ def project_overview(
 ) -> dict[str, Any]:
     """Get a comprehensive overview of a project structure and metadata.
 
-    Works on full projects and component exports (AOI, Program). Returns
-    controller metadata (None for context), counts, tasks, programs,
-    unscheduled programs, AOIs, data types, and modules.
+    Works on full projects and component exports (AOI, Program, Module, Routine,
+    Rung, DataType, Tag). Returns controller metadata (None for context), counts,
+    tasks, programs, unscheduled programs, AOIs, data types, and modules.
 
     Args:
         registry: ProjectRegistry to load from.
@@ -109,13 +109,15 @@ def project_overview(
         Dict with keys:
         - file: Relative path to project file.
         - target_type: "Controller", "AddOnInstructionDefinition", etc.
-        - target_name: Name of target.
+        - target_name: Name of target (omitted when empty, e.g. some Rung exports).
         - is_component_export: True if this is a context export.
         - controller: Dict with name, processor_type, firmware (e.g., "37.11"),
                       project_creation_date, last_modified_date, project_sn,
                       is_safety_controller, safety_level (if safety). None for
                       context exports.
         - counts: Dict with data_types, aois, modules, controller_tags,
+                  module_io_tags (module I/O tag references, e.g. "Local:1:I";
+                  these are not Logix tags and are not in controller_tags),
                   programs, tasks, routines.
         - tasks: List of dicts with name, type, rate, priority, watchdog,
                  inhibited (only if True), description (first_line),
@@ -153,11 +155,11 @@ def project_overview(
     # Count routines across all programs
     routine_count = sum(len(prog.routines) for prog in project.programs.values())
 
-    # Count controller tags (None if context export)
-    controller_tags_count = 0
-    if project.controller and not project.controller.is_context:
-        # Try to get tags from project (not from controller which doesn't have them)
-        controller_tags_count = len(project.tags)
+    # Count controller-scoped tags (module I/O tags are not counted here)
+    controller_tags_count = len(project.controller_tags)
+
+    # Count module I/O tags (their global names contain ':', e.g. "Local:1:I")
+    module_io_tags_count = sum(1 for name in project.tags if ":" in name)
 
     # Build tasks list
     tasks_list = []
@@ -203,11 +205,8 @@ def project_overview(
     aois_list = []
     for aoi_name, aoi in project.aois.items():
         aoi_str = aoi_name
-        # Try to extract revision from attributes
-        if hasattr(aoi, "attributes") and aoi.attributes:
-            rev = aoi.attributes.get("Rev")
-            if rev:
-                aoi_str = f"{aoi_name} v{rev}"
+        if aoi.revision:
+            aoi_str = f"{aoi_name} v{aoi.revision}"
         aois_list.append(aoi_str)
 
     # Build data types list
@@ -237,6 +236,7 @@ def project_overview(
                 "aois": len(project.aois),
                 "modules": len(project.modules),
                 "controller_tags": controller_tags_count,
+                "module_io_tags": module_io_tags_count,
                 "programs": len(project.programs),
                 "tasks": len(project.tasks),
                 "routines": routine_count,

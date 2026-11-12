@@ -181,6 +181,84 @@ def _find_text_matches(text: str, query: str) -> list[tuple[int, int]]:
     return matches
 
 
+def _strip_st_comments_per_line(lines: list[str]) -> list[str]:
+    """Remove ST comments from each line while preserving line count and order.
+
+    Handles ``//`` line comments, ``(* ... *)`` and ``/* ... */`` block comments
+    (which may span several lines), and single-quoted string literals (where
+    ``''`` is an escaped quote and comment markers are ignored). Block comments
+    carry across lines; string literals do not.
+
+    Args:
+        lines: Raw ST line texts, in routine order.
+
+    Returns:
+        One entry per input line containing only its code. Fully commented
+        lines become "". Leading indentation is kept; trailing whitespace is
+        removed.
+    """
+    result: list[str] = []
+    block_close: str | None = None  # "*)" or "*/" while inside a block comment
+    for raw in lines:
+        code: list[str] = []
+        i = 0
+        n = len(raw)
+        while i < n:
+            if block_close is not None:
+                end = raw.find(block_close, i)
+                if end == -1:
+                    break
+                i = end + len(block_close)
+                block_close = None
+                continue
+            if raw[i] == "'":
+                # String literal: consume through the closing quote ('' is escaped)
+                j = i + 1
+                while j < n:
+                    if raw[j] == "'":
+                        if j + 1 < n and raw[j + 1] == "'":
+                            j += 2
+                            continue
+                        break
+                    j += 1
+                code.append(raw[i : j + 1])
+                i = j + 1
+            elif raw.startswith("//", i):
+                break
+            elif raw.startswith("(*", i):
+                block_close = "*)"
+                i += 2
+            elif raw.startswith("/*", i):
+                block_close = "*/"
+                i += 2
+            else:
+                code.append(raw[i])
+                i += 1
+        result.append("".join(code).rstrip())
+    return result
+
+
+def _st_search_lines(routine: Any, kind: str) -> list[tuple[int, str]]:
+    """Return (line_number, text) pairs for an ST routine to search.
+
+    For kind="text" the raw line text is returned (comments included). For
+    other kinds the text is comment-stripped so commented-out code and comment
+    prose are not reported as references. Original line numbers are kept.
+
+    Args:
+        routine: A py_l5x Routine with ST content.
+        kind: The search kind ("tag", "instruction", or "text").
+
+    Returns:
+        List of (line number, text) tuples in routine order.
+    """
+    raw = [(line.number, line.text or "") for line in routine.st_lines]
+    if kind == "text":
+        return raw
+    stripped = _strip_st_comments_per_line([text for _, text in raw])
+    return [(number, code) for (number, _), code in zip(raw, stripped, strict=True)]
+
+
 def _classify_tag_usage(
     text: str, match_pos: int, aoi_names: set[str] | None = None
 ) -> str:
@@ -325,6 +403,12 @@ def find_references(
 
     When kind="instruction", matches instruction calls (INSTR\\s*\\() case-insensitive.
 
+    For ST routines, kind="tag" and kind="instruction" match against code with
+    comments removed (``//``, ``(* *)``, ``/* */``; string literals kept), so
+    commented-out code and comment prose are not reported. The reported
+    ``line`` is the original ST line number and ``text`` is the stripped code.
+    kind="text" searches the raw ST lines and RLL rung comments.
+
     When kind="text", case-insensitive substring matching in logic text and comments.
 
     Args:
@@ -457,24 +541,24 @@ def find_references(
                         container_key = f"{prog_name}/{routine_name}"
                         summary[container_key] = summary.get(container_key, 0) + 1
 
-            # Search ST lines
+            # Search ST lines (comment-stripped unless kind="text")
             if routine.st_lines:
-                for line in routine.st_lines:
+                for line_number, line_text in _st_search_lines(routine, kind):
                     if use_aliases:
                         line_matches, mnemonics = (
-                            search_fn(line.text, query) if line.text else ([], [])
+                            search_fn(line_text, query) if line_text else ([], [])
                         )
                         matched_mnemonics.update(mnemonics)
                     else:
-                        line_matches = search_fn(line.text, query) if line.text else []
+                        line_matches = search_fn(line_text, query) if line_text else []
                     for _match_start, _match_end in line_matches:
                         match_dict = {
                             "container_type": "program",
                             "container": prog_name,
                             "routine": routine_name,
                             "routine_type": "ST",
-                            "line": line.number,
-                            "text": line.text,
+                            "line": line_number,
+                            "text": line_text,
                         }
                         match_dict = compact(match_dict)
                         matches.append(match_dict)
@@ -521,17 +605,17 @@ def find_references(
                             matches.append(match_dict)
                             summary[container_key] = summary.get(container_key, 0) + 1
 
-                # Search ST lines
+                # Search ST lines (comment-stripped unless kind="text")
                 if routine.st_lines:
-                    for line in routine.st_lines:
+                    for line_number, line_text in _st_search_lines(routine, kind):
                         if use_aliases:
                             line_matches, mnemonics = (
-                                search_fn(line.text, query) if line.text else ([], [])
+                                search_fn(line_text, query) if line_text else ([], [])
                             )
                             matched_mnemonics.update(mnemonics)
                         else:
                             line_matches = (
-                                search_fn(line.text, query) if line.text else []
+                                search_fn(line_text, query) if line_text else []
                             )
                         for _match_start, _match_end in line_matches:
                             match_dict = {
@@ -539,8 +623,8 @@ def find_references(
                                 "container": aoi_name,
                                 "routine": routine_name,
                                 "routine_type": "ST",
-                                "line": line.number,
-                                "text": line.text,
+                                "line": line_number,
+                                "text": line_text,
                             }
                             match_dict = compact(match_dict)
                             matches.append(match_dict)

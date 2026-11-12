@@ -4,8 +4,9 @@ import json
 
 import pytest
 
-from l5x_mcp.registry import ItemNotFoundError
+from l5x_mcp.registry import ItemNotFoundError, L5XError
 from l5x_mcp.tools.aois import get_aoi, list_aois
+from l5x_mcp.tools.programs import MAX_CHARS_DEFAULT
 
 
 class TestListAOIs:
@@ -334,5 +335,152 @@ class TestAOICallSignature:
         assert "risingEdge" not in call_sig
         assert "fallingEdge" not in call_sig
         # EnableIn/EnableOut should also not be present
-        assert "EnableIn" not in call_sig
-        assert "EnableOut" not in call_sig
+
+
+class TestAOIParameterDetails:
+    """Typed vs plain AOI parameters and their value-level fields."""
+
+    def test_typed_input_has_min_max_and_engineering_unit(self, registry):
+        """Typed Input params expose min/max/engineering_unit; min 0 is kept."""
+        result = get_aoi(registry, "Debounce", path="example.L5X")
+        on_delay = next(p for p in result["parameters"] if p["name"] == "onDelay")
+        assert on_delay["usage"] == "Input"
+        assert on_delay["min"] == 0
+        assert on_delay["max"] == 2147483647
+        assert on_delay["engineering_unit"] == "ms"
+
+    def test_typed_bool_output_has_state_labels(self, registry):
+        """Typed BOOL params expose state0/state1."""
+        result = get_aoi(registry, "Debounce", path="example.L5X")
+        state = next(p for p in result["parameters"] if p["name"] == "state")
+        assert state["usage"] == "Output"
+        assert state["state0"] == "off"
+        assert state["state1"] == "on"
+
+    def test_enable_in_has_no_value_fields(self, registry):
+        """EnableIn/EnableOut (plain params) omit value-only fields."""
+        result = get_aoi(registry, "Debounce", path="example.L5X")
+        enable_in = next(p for p in result["parameters"] if p["name"] == "EnableIn")
+        for key in ("min", "max", "state0", "state1", "engineering_unit"):
+            assert key not in enable_in
+        assert enable_in["radix"] == "Decimal"
+        assert "dimensions" not in enable_in
+
+    def test_inout_parameter_is_plain_without_value_fields(self, registry):
+        """InOut parameters are plain and have no min/max/state fields."""
+        result = get_aoi(registry, "FanucRobot", path="example.L5X")
+        seq = next(p for p in result["parameters"] if p["name"] == "seq")
+        assert seq["usage"] == "InOut"
+        assert seq["data_type"] == "SeqCtrl"
+        assert seq["required"] is True
+        for key in ("min", "max", "state0", "state1", "engineering_unit"):
+            assert key not in seq
+
+    def test_inout_parameter_operand_comments(self, registry):
+        """InOut operand comments (per-member faults) are exposed."""
+        result = get_aoi(registry, "FanucRobot", path="example.L5X")
+        seq = next(p for p in result["parameters"] if p["name"] == "seq")
+        assert seq["operand_comments"][".FAULT.0"] == (
+            "Robot fault did not reset when running"
+        )
+        assert seq["operand_comments"][".FAULT.11"] == "Robot did not Hold (pause)"
+
+    def test_typed_parameter_operand_comments(self, registry):
+        """Typed params expose operand comments such as enumerated state labels."""
+        result = get_aoi(registry, "SeqCtrl", path="example.L5X")
+        state = next(p for p in result["parameters"] if p["name"] == "state")
+        assert state["operand_comments"][".0"] == "running"
+        assert state["operand_comments"][".6"] == "aborted"
+
+    def test_parameter_without_comments_omits_operand_comments(self, registry):
+        """No operand_comments key when a parameter has none."""
+        result = get_aoi(registry, "Debounce", path="example.L5X")
+        on_delay = next(p for p in result["parameters"] if p["name"] == "onDelay")
+        assert "operand_comments" not in on_delay
+
+    def test_inout_array_parameter_dimensions(self, registry):
+        """An InOut array parameter reports its dimensions as a list of ints."""
+        result = get_aoi(registry, "FanucRobot", path="example.L5X")
+        alarms = next(p for p in result["parameters"] if p["name"] == "allowableAlarms")
+        assert alarms["dimensions"] == [20]
+        assert alarms["data_type"] == "robotAlarmCode"
+
+    def test_full_result_with_parameters_is_json_serializable(self, registry):
+        """get_aoi output for an AOI with mixed parameter types is JSON-safe."""
+        result = get_aoi(registry, "FanucRobot", path="example.L5X")
+        json.dumps(result)
+        assert len(result["parameters"]) == 13
+
+
+def _logic_size(logic: dict) -> int:
+    return len(json.dumps(logic, separators=(",", ":"), ensure_ascii=False))
+
+
+class TestGetAOILogicBudget:
+    """max_chars budget for get_aoi(include_logic=True)."""
+
+    def test_whole_response_within_default_budget(self, registry):
+        result = get_aoi(registry, "FanucRobot", include_logic=True, path="example.L5X")
+        assert _logic_size(result) <= MAX_CHARS_DEFAULT
+        # FanucRobot's Logic routine does not fit next to its parameters.
+        assert result["logic"] == {}
+        assert result["logic_omitted"] == ["Logic"]
+        assert 'get_routine_logic(routine=<name>, aoi="FanucRobot")' in result["note"]
+
+    def test_logic_included_when_it_fits(self, registry):
+        result = get_aoi(
+            registry,
+            "FanucRobot",
+            include_logic=True,
+            max_chars=20000,
+            path="example.L5X",
+        )
+        assert list(result["logic"]) == ["Logic"]
+        assert "logic_omitted" not in result
+        assert "note" not in result
+        assert _logic_size(result) <= 20000
+
+    def test_routines_included_in_order_until_budget(self, registry):
+        # Debounce has EnableInFalse then the larger Logic routine; with a budget
+        # just above the non-logic part only the first routine fits.
+        base = _logic_size(get_aoi(registry, "Debounce", path="example.L5X"))
+        result = get_aoi(
+            registry,
+            "Debounce",
+            include_logic=True,
+            max_chars=base + 1000,
+            path="example.L5X",
+        )
+        assert list(result["logic"]) == ["EnableInFalse"]
+        assert result["logic_omitted"] == ["Logic"]
+        assert _logic_size(result) <= base + 1000
+
+    @pytest.mark.parametrize("max_chars", [1000, 2000, 8000, 30000])
+    @pytest.mark.parametrize(
+        "aoi", ["Debounce", "GenericInput", "SeqCtrl", "FanucRobot"]
+    )
+    def test_response_never_exceeds_budget(self, registry, aoi, max_chars):
+        result = get_aoi(
+            registry, aoi, include_logic=True, max_chars=max_chars, path="example.L5X"
+        )
+        base = _logic_size(get_aoi(registry, aoi, path="example.L5X"))
+        if base + 400 <= max_chars:
+            assert _logic_size(result) <= max_chars
+        else:
+            assert result["logic"] == {}
+
+    def test_no_budget_keys_without_include_logic(self, registry):
+        result = get_aoi(registry, "Debounce", path="example.L5X")
+        assert "logic" not in result
+        assert "logic_omitted" not in result
+
+    @pytest.mark.parametrize("max_chars", [999, 100001, "8000"])
+    def test_invalid_max_chars_rejected(self, registry, max_chars):
+        with pytest.raises(L5XError):
+            get_aoi(
+                registry,
+                "Debounce",
+                include_logic=True,
+                max_chars=max_chars,
+                path="example.L5X",
+            )

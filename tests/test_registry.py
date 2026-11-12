@@ -80,13 +80,18 @@ class TestProjectRegistry:
         """Test discover finds all .L5X fixtures."""
         registry = ProjectRegistry(fixtures_dir)
         discovered = registry.discover()
-        assert len(discovered) == 4
+        assert len(discovered) == 9
         names = {p.name for p in discovered}
         assert names == {
             "example.L5X",
             "simple_example.L5X",
             "Debounce_AOI.L5X",
             "MainProgram_Program.L5X",
+            "A_UDT_DataType.L5X",
+            "robotAlarmCode_DataType_String.L5X",
+            "ShopRobot_Module.L5X",
+            "SequenceRoutine_Routine_RLL.L5X",
+            "Rung2_from_SequenceRoutine.L5X",
         }
 
     def test_discover_sorted(self, fixtures_dir: Path) -> None:
@@ -327,7 +332,7 @@ class TestIntegration:
         """Test discovering all fixture files."""
         registry = ProjectRegistry(fixtures_dir)
         discovered = registry.discover()
-        assert len(discovered) == 4
+        assert len(discovered) == 9
 
     def test_resolve_auto_picks_single_fixture(
         self, tmp_path: Path, fixtures_dir: Path
