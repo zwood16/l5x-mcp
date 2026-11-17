@@ -3,7 +3,7 @@
 import pytest
 from py_l5x import load
 
-from l5x_mcp.registry import L5XError
+from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, L5XError
 from l5x_mcp.specs import from_py_spec
 from l5x_mcp.tools.definitions import (
     add_aoi,
@@ -24,6 +24,8 @@ from l5x_mcp.tools.definitions import (
 )
 from l5x_mcp.tools.edit_logic import add_rungs
 
+OUT_DIR = DEFAULT_OUTPUT_DIR
+OUT = OUT_DIR + "/"
 EXAMPLE = "example.L5X"
 
 
@@ -132,7 +134,7 @@ class TestSpecRoundTrip:
             "program": "programs",
         }[kind]
         original = getattr(before, collection)[name]
-        written = getattr(_read(editable, "out.L5X"), collection)[name]
+        written = getattr(_read(editable, OUT + "out.L5X"), collection)[name]
         assert _comparable(from_py_spec(written.to_spec())) == _comparable(
             from_py_spec(original.to_spec())
         )
@@ -145,7 +147,7 @@ class TestSpecRoundTrip:
         replace_program(editable, spec=spec, output_path="out.L5X", path=EXAMPLE)
 
         original = load(str(editable.root / EXAMPLE)).programs["Robot"]
-        written = _read(editable, "out.L5X").programs["Robot"]
+        written = _read(editable, OUT + "out.L5X").programs["Robot"]
         assert from_py_spec(written.to_spec()) == from_py_spec(original.to_spec())
 
 
@@ -166,7 +168,7 @@ class TestDataTypes:
             path=EXAMPLE,
         )
 
-        udt = _read(editable, "out.L5X").data_types["NewUdt"]
+        udt = _read(editable, OUT + "out.L5X").data_types["NewUdt"]
         assert set(udt.visible_members) == {"Run", "Count", "Timer", "Arr"}
         # py_l5x stores BOOL members as BIT bits on hidden SINT hosts.
         assert udt.visible_members["Run"].data_type == "BIT"
@@ -183,7 +185,7 @@ class TestDataTypes:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_unknown_member_type_is_refused(self, editable):
         with pytest.raises(L5XError, match="NoSuchType"):
@@ -210,7 +212,7 @@ class TestDataTypes:
         )
 
         assert result["members"] == len(spec["members"])
-        udt = _read(editable, "out.L5X").data_types["simple_udt"]
+        udt = _read(editable, OUT + "out.L5X").data_types["simple_udt"]
         assert udt.visible_members["extra"].description == "new"
 
     def test_replace_unknown_type_is_refused(self, editable):
@@ -232,7 +234,7 @@ class TestDataTypes:
         )
 
         assert result["renamed"] == {"from": "simple_udt", "to": "Simple2"}
-        project = _read(editable, "out.L5X")
+        project = _read(editable, OUT + "out.L5X")
         assert "Simple2" in project.data_types
         assert project.programs["MainProgram"].tags[
             "a_simple_udt_instance"
@@ -243,7 +245,7 @@ class TestDataTypes:
             remove_data_type(
                 editable, name="A_UDT", output_path="out.L5X", path=EXAMPLE
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_remove_with_force_deletes_the_type(self, editable):
         result = remove_data_type(
@@ -251,7 +253,7 @@ class TestDataTypes:
         )
 
         assert result["removed"] == "A_UDT"
-        assert "A_UDT" not in _read(editable, "out.L5X").data_types
+        assert "A_UDT" not in _read(editable, OUT + "out.L5X").data_types
 
 
 class TestAOIs:
@@ -279,7 +281,7 @@ class TestAOIs:
         )
 
         assert result["parameters"] == 2
-        aoi = _read(editable, "out.L5X").aois["NewAoi"]
+        aoi = _read(editable, OUT + "out.L5X").aois["NewAoi"]
         assert {"EnableIn", "EnableOut", "In1", "Out1"} <= set(aoi.parameters)
         assert aoi.description == "new aoi"
         assert aoi.routines["Logic"].rungs[0].text == "XIC(In1)MOV(1,Out1);"
@@ -297,7 +299,7 @@ class TestAOIs:
 
         with pytest.raises(L5XError, match="call site"):
             replace_aoi(editable, spec=spec, output_path="out.L5X", path=EXAMPLE)
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
         replace_aoi(
             editable,
@@ -306,7 +308,7 @@ class TestAOIs:
             output_path="out.L5X",
             path=EXAMPLE,
         )
-        assert _read(editable, "out.L5X").aois["Debounce"].parameters["onDelay"]
+        assert _read(editable, OUT + "out.L5X").aois["Debounce"].parameters["onDelay"]
 
     def test_rename_rewrites_call_sites(self, editable):
         result = rename_aoi(
@@ -318,7 +320,7 @@ class TestAOIs:
         )
 
         assert result["call_sites"] == 1
-        project = _read(editable, "out.L5X")
+        project = _read(editable, OUT + "out.L5X")
         assert "Debounce2" in project.aois
         call = project.aois["GenericInput"].routines["Logic"].rungs[2].text
         assert "Debounce2(" in call
@@ -333,11 +335,11 @@ class TestAOIs:
         add_aoi(editable, spec=self.AOI_SPEC, output_path="one.L5X", path=EXAMPLE)
 
         result = remove_aoi(
-            editable, name="NewAoi", output_path="two.L5X", path="one.L5X"
+            editable, name="NewAoi", output_path="two.L5X", path=OUT + "one.L5X"
         )
 
         assert result["removed"] == "NewAoi"
-        assert "NewAoi" not in _read(editable, "two.L5X").aois
+        assert "NewAoi" not in _read(editable, OUT + "two.L5X").aois
 
 
 class TestPrograms:
@@ -361,7 +363,7 @@ class TestPrograms:
         )
 
         assert result["task"] == "MainTask"
-        project = _read(editable, "out.L5X")
+        project = _read(editable, OUT + "out.L5X")
         assert "NewProg" in project.tasks["MainTask"].programs
         assert project.programs["NewProg"].tags["Speed"].value == 1.5
         assert project.programs["NewProg"].main_routine_name == "Main"
@@ -372,7 +374,7 @@ class TestPrograms:
         )
 
         assert result["task"] is None
-        project = _read(editable, "out.L5X")
+        project = _read(editable, OUT + "out.L5X")
         assert "NewProg" in project.programs
         assert all("NewProg" not in t.programs for t in project.tasks.values())
 
@@ -390,7 +392,7 @@ class TestPrograms:
         spec = {**self.PROGRAM_SPEC, "tags": [{"name": "Al", "alias_for": "NoTag"}]}
         with pytest.raises(L5XError, match="NoTag"):
             add_program(editable, spec=spec, output_path="out.L5X", path=EXAMPLE)
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_add_with_alias_to_controller_or_same_spec_tag(self, editable):
         spec = {
@@ -402,16 +404,18 @@ class TestPrograms:
             ],
         }
         add_program(editable, spec=spec, output_path="out.L5X", path=EXAMPLE)
-        assert "A2" in _read(editable, "out.L5X").programs["NewProg"].tags
+        assert "A2" in _read(editable, OUT + "out.L5X").programs["NewProg"].tags
 
     def test_replace_removes_tags_not_in_the_spec(self, editable):
         add_program(
             editable, spec=self.PROGRAM_SPEC, output_path="added.L5X", path=EXAMPLE
         )
         spec = {**self.PROGRAM_SPEC, "tags": []}
-        replace_program(editable, spec=spec, output_path="out.L5X", path="added.L5X")
+        replace_program(
+            editable, spec=spec, output_path="out.L5X", path=OUT + "added.L5X"
+        )
 
-        program = _read(editable, "out.L5X").programs["NewProg"]
+        program = _read(editable, OUT + "out.L5X").programs["NewProg"]
         assert len(program.tags) == 0
         assert len(program.routines) == 2
 
@@ -430,11 +434,11 @@ class TestPrograms:
             name="PeriodicProgram",
             new_name="Periodic2",
             output_path="step2.L5X",
-            path="step1.L5X",
+            path=OUT + "step1.L5X",
         )
 
         assert result["references"]["locations"] == ["MainProgram/MainRoutine rung 1"]
-        project = _read(editable, "step2.L5X")
+        project = _read(editable, OUT + "step2.L5X")
         assert "Periodic2" in project.programs
         assert "Periodic2" in project.tasks["PeriodicTask"].programs
 
@@ -444,7 +448,7 @@ class TestPrograms:
         )
 
         assert result["removed"] == "PeriodicProgram"
-        project = _read(editable, "out.L5X")
+        project = _read(editable, OUT + "out.L5X")
         assert "PeriodicProgram" not in project.programs
         assert "PeriodicProgram" not in project.tasks["PeriodicTask"].programs
 
@@ -457,7 +461,7 @@ class TestPrograms:
             path=EXAMPLE,
         )
         assert moved["previous_task"] == "PeriodicTask"
-        project = _read(editable, "moved.L5X")
+        project = _read(editable, OUT + "moved.L5X")
         assert "PeriodicProgram" in project.tasks["MainTask"].programs
         assert "PeriodicProgram" not in project.tasks["PeriodicTask"].programs
 
@@ -465,12 +469,12 @@ class TestPrograms:
             editable,
             name="PeriodicProgram",
             output_path="free.L5X",
-            path="moved.L5X",
+            path=OUT + "moved.L5X",
         )
         assert unscheduled["previous_task"] == "MainTask"
         assert all(
             "PeriodicProgram" not in t.programs
-            for t in _read(editable, "free.L5X").tasks.values()
+            for t in _read(editable, OUT + "free.L5X").tasks.values()
         )
 
     def test_schedule_unknown_task_is_refused(self, editable):
@@ -509,7 +513,7 @@ class TestSetDescription:
             output_path="set.L5X",
             path=EXAMPLE,
         )
-        assert reader(_read(editable, "set.L5X")).description == "Documented"
+        assert reader(_read(editable, OUT + "set.L5X")).description == "Documented"
 
         set_description(
             editable,
@@ -518,9 +522,9 @@ class TestSetDescription:
             description="",
             program=program,
             output_path="clear.L5X",
-            path="set.L5X",
+            path=OUT + "set.L5X",
         )
-        assert not reader(_read(editable, "clear.L5X")).description
+        assert not reader(_read(editable, OUT + "clear.L5X")).description
 
     def test_routine_needs_its_program(self, editable):
         with pytest.raises(L5XError, match="program is required"):

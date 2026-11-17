@@ -135,7 +135,8 @@ def add_data_type(
     Args:
         registry: ProjectRegistry to load from.
         spec: The UDT spec.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -166,7 +167,8 @@ def replace_data_type(
     Args:
         registry: ProjectRegistry to load from.
         spec: The complete new UDT spec.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -197,7 +199,8 @@ def rename_data_type(
         registry: ProjectRegistry to load from.
         name: Current UDT name.
         new_name: New UDT name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -227,7 +230,8 @@ def remove_data_type(
     Args:
         registry: ProjectRegistry to load from.
         name: UDT name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         force: Delete even if in use.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -264,7 +268,8 @@ def add_aoi(
     Args:
         registry: ProjectRegistry to load from.
         spec: The AOI spec.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -298,7 +303,8 @@ def replace_aoi(
     Args:
         registry: ProjectRegistry to load from.
         spec: The complete new AOI spec.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         allow_signature_change: Allow changing Required parameters while called.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -330,7 +336,8 @@ def rename_aoi(
         registry: ProjectRegistry to load from.
         name: Current AOI name.
         new_name: New AOI name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -362,7 +369,8 @@ def remove_aoi(
     Args:
         registry: ProjectRegistry to load from.
         name: AOI name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         force: Delete even if in use, leaving users dangling.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -401,7 +409,8 @@ def add_program(
     Args:
         registry: ProjectRegistry to load from.
         spec: The program spec.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         task: Task to schedule the program in.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -443,7 +452,8 @@ def replace_program(
     Args:
         registry: ProjectRegistry to load from.
         spec: The complete new program spec.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -482,7 +492,8 @@ def rename_program(
         registry: ProjectRegistry to load from.
         name: Current program name.
         new_name: New program name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -513,7 +524,8 @@ def remove_program(
     Args:
         registry: ProjectRegistry to load from.
         name: Program name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -544,7 +556,8 @@ def schedule_program(
     Args:
         registry: ProjectRegistry to load from.
         name: Program name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         task: Target task name, or null to unschedule.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -589,7 +602,8 @@ def set_description(
         kind: "program", "routine", "data_type" or "aoi".
         name: Object name.
         description: New description ("" removes it).
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         program: Program containing the routine (kind="routine" only).
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.

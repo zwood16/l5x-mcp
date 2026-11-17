@@ -17,7 +17,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
-from l5x_mcp.registry import L5XError, ProjectRegistry
+from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, L5XError, ProjectRegistry
 from l5x_mcp.tools import (
     aois,
     components,
@@ -71,11 +71,14 @@ Use find_references and instruction_usage for cross-references.
 _EDIT_SECTION = """
 Editing (write tools are enabled):
 - Each write tool loads the project at path, applies one change and writes a NEW .L5X
-  to output_path. The source file is never modified. output_path is required, must be
-  a new .L5X inside the server root. overwrite=true only replaces a file a write
-  tool wrote earlier in this server session (and that is unchanged since); other
-  existing files are never replaced. To chain several edits, pass the previous
-  output as the next path.
+  to output_path. The source file is never modified. output_path is required. A bare
+  file name such as "step1.L5X" is written to {output_dir}/ under the server root;
+  a path with a directory is relative to the root (and must stay inside it). Files in
+  {output_dir}/ are skipped by auto-discovery, so path can still be omitted for the
+  source project. Results give the root-relative file: pass it as the next path to
+  chain edits. overwrite=true only replaces a file a write tool wrote earlier in this
+  server session (and that is unchanged since); other existing files are never
+  replaced.
 - Replacing a UDT, AOI or program: get_spec returns the object as a spec in the form
   the add/replace tools accept; change that spec, then call the replace_* tool.
 - create_*_file and export_component write Studio Import Component files; no project
@@ -88,8 +91,23 @@ Editing (write tools are enabled):
 INSTRUCTIONS = _READ_ONLY_OPENING + _SHARED_BODY
 """Server prompt when the server is read-only."""
 
-EDIT_INSTRUCTIONS = _EDIT_OPENING + _SHARED_BODY + _EDIT_SECTION
-"""Server prompt when write tools are enabled."""
+
+def edit_instructions(output_dir: str = DEFAULT_OUTPUT_DIR) -> str:
+    """Return the server prompt for write mode.
+
+    Args:
+        output_dir: Root-relative output folder to mention in the prompt.
+
+    Returns:
+        The full instructions text.
+    """
+    return (
+        _EDIT_OPENING + _SHARED_BODY + _EDIT_SECTION.replace("{output_dir}", output_dir)
+    )
+
+
+EDIT_INSTRUCTIONS = edit_instructions()
+"""Server prompt when write tools are enabled (default output folder)."""
 
 TOOLS: list[Callable[..., Any]] = [
     project.list_l5x_files,
@@ -245,7 +263,10 @@ def create_server(
         server = MCPServer(name=SERVER_NAME, instructions=INSTRUCTIONS)
         groups = [(TOOLS, _READ_ONLY)]
     else:
-        server = MCPServer(name=SERVER_NAME, instructions=EDIT_INSTRUCTIONS)
+        server = MCPServer(
+            name=SERVER_NAME,
+            instructions=edit_instructions(registry.relpath(registry.output_dir)),
+        )
         groups = [(TOOLS, _READ_ONLY), (WRITE_TOOLS, _WRITE)]
     for tool_list, tool_annotations in groups:
         for fn in tool_list:

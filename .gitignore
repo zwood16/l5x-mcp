@@ -227,3 +227,6 @@ __marimo__/
 tools/sdk/run*/
 tools/sdk/dbg*/
 tools/sdk/results/
+
+# Default output folder of the write tools (when this repo is the server root)
+l5x-mcp-output/

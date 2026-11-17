@@ -11,7 +11,7 @@ from mcp import Client, StdioServerParameters
 from py_l5x import load
 
 from l5x_mcp import main, parse_args
-from l5x_mcp.registry import ProjectRegistry
+from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, ProjectRegistry
 from l5x_mcp.server import (
     EDIT_INSTRUCTIONS,
     INSTRUCTIONS,
@@ -20,6 +20,8 @@ from l5x_mcp.server import (
     _strip_registry_doc,
     create_server,
 )
+
+OUT_DIR = DEFAULT_OUTPUT_DIR
 
 pytestmark = pytest.mark.anyio
 
@@ -173,7 +175,7 @@ async def test_write_tool_round_trip_through_mcp(writable_server, editable):
     assert not result.is_error, result.content[0].text
     assert _payload(result)["added"] == ["McpProbe"]
     assert source.read_bytes() == before
-    tag = load(str(editable.root / "mcp_out.L5X")).controller_tags["McpProbe"]
+    tag = load(str(editable.root / OUT_DIR / "mcp_out.L5X")).controller_tags["McpProbe"]
     assert tag.to_python()["PRE"] == 250
 
 
@@ -192,7 +194,7 @@ async def test_write_spec_with_unknown_field_is_rejected_before_running(
 
     assert result.is_error
     assert "descripton" in result.content[0].text
-    assert not (editable.root / "typo.L5X").exists()
+    assert not (editable.root / OUT_DIR / "typo.L5X").exists()
 
 
 async def test_write_error_reaches_the_model(writable_server):

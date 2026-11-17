@@ -3,7 +3,7 @@
 import pytest
 from py_l5x import load
 
-from l5x_mcp.registry import ItemNotFoundError, L5XError
+from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, ItemNotFoundError, L5XError
 from l5x_mcp.tools.edit_logic import (
     add_routine,
     add_rungs,
@@ -14,6 +14,8 @@ from l5x_mcp.tools.edit_logic import (
     set_st_lines,
 )
 
+OUT_DIR = DEFAULT_OUTPUT_DIR
+OUT = OUT_DIR + "/"
 EXAMPLE = "example.L5X"
 
 
@@ -35,7 +37,9 @@ class TestAddRoutine:
 
         assert result["rungs"] == 1
         routine = (
-            _read(editable, "out.L5X").programs["PeriodicProgram"].routines["NewRll"]
+            _read(editable, OUT + "out.L5X")
+            .programs["PeriodicProgram"]
+            .routines["NewRll"]
         )
         assert routine.type_ == "RLL"
         assert routine.description == "Scratch"
@@ -55,7 +59,9 @@ class TestAddRoutine:
 
         assert result["lines"] == 2
         routine = (
-            _read(editable, "out.L5X").programs["AnotherProgram"].routines["NewSt"]
+            _read(editable, OUT + "out.L5X")
+            .programs["AnotherProgram"]
+            .routines["NewSt"]
         )
         assert routine.type_ == "ST"
         assert routine.st_code == "a := 1;\nb := a + 1;"
@@ -80,7 +86,7 @@ class TestAddRoutine:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_duplicate_routine_name_is_refused(self, editable):
         with pytest.raises(L5XError, match="MainRoutine"):
@@ -115,7 +121,7 @@ class TestRenameRoutine:
         )
 
         assert result["renamed"] == {"from": "MainRoutine", "to": "MainR2"}
-        program = _read(editable, "out.L5X").programs["MainProgram"]
+        program = _read(editable, OUT + "out.L5X").programs["MainProgram"]
         assert program.main_routine_name == "MainR2"
         assert "MainR2" in program.routines
         assert "references" not in result
@@ -133,7 +139,9 @@ class TestRenameRoutine:
         assert result["references"]["locations"] == ["MainProgram/MainRoutine rung 0"]
         # JSR text is not rewritten; the caller still names the old routine.
         caller = (
-            _read(editable, "out.L5X").programs["MainProgram"].routines["MainRoutine"]
+            _read(editable, OUT + "out.L5X")
+            .programs["MainProgram"]
+            .routines["MainRoutine"]
         )
         assert caller.rungs[0].text == "JSR(SequenceRoutine,0);"
 
@@ -159,7 +167,7 @@ class TestRemoveRoutine:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_removes_and_reports_jsr_callers(self, editable):
         result = remove_routine(
@@ -172,7 +180,7 @@ class TestRemoveRoutine:
 
         assert result["removed"] == "SequenceRoutine"
         assert result["references"]["locations"] == ["MainProgram/MainRoutine rung 0"]
-        program = _read(editable, "out.L5X").programs["MainProgram"]
+        program = _read(editable, OUT + "out.L5X").programs["MainProgram"]
         assert "SequenceRoutine" not in program.routines
 
 
@@ -191,7 +199,7 @@ class TestRungs:
         assert result["inserted"] == [0]
         assert result["rung_count"] == 3
         rungs = (
-            _read(editable, "out.L5X")
+            _read(editable, OUT + "out.L5X")
             .programs["PeriodicProgram"]
             .routines["main"]
             .rungs
@@ -211,7 +219,7 @@ class TestRungs:
 
         assert result["inserted"] == [2]
         rungs = (
-            _read(editable, "out.L5X")
+            _read(editable, OUT + "out.L5X")
             .programs["PeriodicProgram"]
             .routines["main"]
             .rungs
@@ -228,7 +236,7 @@ class TestRungs:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_rungs_are_refused_for_st_routines(self, editable):
         with pytest.raises(L5XError, match="ST, not RLL"):
@@ -271,12 +279,12 @@ class TestRungs:
             number=0,
             text="XIC(test_bool)OTE(test_dint);",
             output_path="step2.L5X",
-            path="step1.L5X",
+            path=OUT + "step1.L5X",
         )
 
         assert result["comment"] == "keep me"
         rung = (
-            _read(editable, "step2.L5X")
+            _read(editable, OUT + "step2.L5X")
             .programs["PeriodicProgram"]
             .routines["main"]
             .rungs[0]
@@ -296,7 +304,7 @@ class TestRungs:
         )
 
         rung = (
-            _read(editable, "out.L5X")
+            _read(editable, OUT + "out.L5X")
             .programs["PeriodicProgram"]
             .routines["main"]
             .rungs[1]
@@ -349,7 +357,7 @@ class TestRungs:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
 
 class TestSetStLines:
@@ -365,7 +373,7 @@ class TestSetStLines:
 
         assert result["line_count"] == 3
         routine = (
-            _read(editable, "out.L5X")
+            _read(editable, OUT + "out.L5X")
             .programs["AnotherProgram"]
             .routines["StructuredTextRoutine"]
         )

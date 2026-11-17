@@ -61,12 +61,16 @@ def list_l5x_files(
         - root: Absolute root directory path.
         - files: List of dicts with keys: path, size_bytes, modified (ISO-8601),
                  target_type, target_name. Per-file errors go in "error" key.
+                 "output": true marks files in the write tools' output folder
+                 (skipped by auto-discovery of the source project).
     """
     files_list: list[dict[str, Any]] = []
     discovered = registry.discover(subdir)
 
     for file_path in discovered:
         entry: dict[str, Any] = {"path": registry.relpath(file_path)}
+        if registry.is_output(file_path):
+            entry["output"] = True
 
         try:
             stat = file_path.stat()

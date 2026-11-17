@@ -3,7 +3,7 @@
 import pytest
 from py_l5x import AliasTag, load
 
-from l5x_mcp.registry import ItemNotFoundError, L5XError
+from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, ItemNotFoundError, L5XError
 from l5x_mcp.tools.definitions import get_spec
 from l5x_mcp.tools.edit_tags import (
     add_tags,
@@ -13,6 +13,8 @@ from l5x_mcp.tools.edit_tags import (
     update_tag,
 )
 
+OUT_DIR = DEFAULT_OUTPUT_DIR
+OUT = OUT_DIR + "/"
 EXAMPLE = "example.L5X"
 
 
@@ -46,7 +48,7 @@ class TestAddTags:
 
         assert result["added"] == ["NewDint", "NewAlias", "NewTimer", "NewArr"]
         assert result["scope"] == "controller"
-        tags = _read(editable, "out.L5X").controller_tags
+        tags = _read(editable, OUT + "out.L5X").controller_tags
         assert tags["NewDint"].data_type == "DINT"
         assert tags["NewDint"].value == 5
         assert tags["NewDint"].description == "d"
@@ -67,7 +69,7 @@ class TestAddTags:
         )
 
         assert result["scope"] == "SafetyProgram"
-        program = _read(editable, "out.L5X").programs["SafetyProgram"]
+        program = _read(editable, OUT + "out.L5X").programs["SafetyProgram"]
         assert program.tags["ProgFlag"].data_type == "BOOL"
 
     def test_unknown_data_type_writes_nothing(self, editable):
@@ -78,7 +80,7 @@ class TestAddTags:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_one_bad_tag_writes_nothing(self, editable):
         with pytest.raises(L5XError, match="tag 'Bad'"):
@@ -91,7 +93,7 @@ class TestAddTags:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_duplicate_name_is_refused(self, editable):
         with pytest.raises(L5XError, match="consumed_tag"):
@@ -135,7 +137,7 @@ class TestAddTagsValidation:
     def _refused(self, editable, tags, match, **kw):
         with pytest.raises(L5XError, match=match):
             self._add(editable, tags, **kw)
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_invalid_metadata_key_is_refused(self, editable):
         self._refused(
@@ -156,7 +158,7 @@ class TestAddTagsValidation:
             editable,
             [{"name": "T1", "data_type": "DINT", "metadata": {"OpcUaAccess": "None"}}],
         )
-        text = (editable.root / "out.L5X").read_text()
+        text = (editable.root / OUT_DIR / "out.L5X").read_text()
         assert '<Tag Name="T1"' in text
         line = next(x for x in text.splitlines() if x.startswith('<Tag Name="T1"'))
         assert 'OpcUaAccess="None"' in line
@@ -174,11 +176,11 @@ class TestAddTagsValidation:
                 }
             ],
         )
-        text = (editable.root / "out.L5X").read_text()
+        text = (editable.root / OUT_DIR / "out.L5X").read_text()
         line = next(x for x in text.splitlines() if x.startswith('<Tag Name="Al"'))
         assert 'Radix="Hex"' in line
         assert 'ExternalAccess="Read Only"' in line
-        tag = _read(editable, "out.L5X").controller_tags["Al"]
+        tag = _read(editable, OUT + "out.L5X").controller_tags["Al"]
         assert tag.alias_for == "consumed_tag"
 
     @pytest.mark.parametrize(
@@ -211,7 +213,7 @@ class TestAddTagsValidation:
     )
     def test_alias_to_existing_targets_is_accepted(self, editable, target):
         self._add(editable, [{"name": "Al", "alias_for": target}])
-        tag = _read(editable, "out.L5X").controller_tags["Al"]
+        tag = _read(editable, OUT + "out.L5X").controller_tags["Al"]
         assert tag.alias_for == target
 
     def test_alias_to_bad_member_is_refused(self, editable):
@@ -227,7 +229,7 @@ class TestAddTagsValidation:
             [{"name": "Al", "alias_for": "consumed_tag"}],
             scope="MainProgram",
         )
-        program = _read(editable, "out.L5X").programs["MainProgram"]
+        program = _read(editable, OUT + "out.L5X").programs["MainProgram"]
         assert program.tags["Al"].alias_for == "consumed_tag"
 
     def test_program_alias_to_program_tag_is_accepted(self, editable):
@@ -247,15 +249,47 @@ class TestAddTagsValidation:
                 {"name": "NewArr", "data_type": "DINT", "dimensions": 4},
             ],
         )
-        tags = _read(editable, "out.L5X").controller_tags
+        tags = _read(editable, OUT + "out.L5X").controller_tags
         assert tags["Al"].alias_for == "NewBase"
+
+    def test_self_alias_is_refused(self, editable):
+        self._refused(editable, [{"name": "Me", "alias_for": "Me"}], "alias cycle")
+
+    def test_alias_cycle_in_one_call_is_refused(self, editable):
+        self._refused(
+            editable,
+            [{"name": "A", "alias_for": "B"}, {"name": "B", "alias_for": "A"}],
+            "alias cycle A -> B -> A",
+        )
+
+    def test_alias_chain_ending_in_batch_base_tag_is_accepted(self, editable):
+        self._add(
+            editable,
+            [
+                {"name": "A", "alias_for": "B"},
+                {"name": "B", "alias_for": "C"},
+                {"name": "C", "data_type": "DINT"},
+            ],
+        )
+
+    def test_alias_chain_ending_in_missing_tag_is_refused(self, editable):
+        self._refused(
+            editable,
+            [{"name": "A", "alias_for": "B"}, {"name": "B", "alias_for": "Nope"}],
+            "alias 'A': target 'Nope' not found",
+        )
+
+    def test_missing_target_error_does_not_list_the_alias(self, editable):
+        with pytest.raises(L5XError) as exc:
+            self._add(editable, [{"name": "Dangling", "alias_for": "NoSuchTag"}])
+        assert "Dangling" not in str(exc.value).replace("alias 'Dangling'", "")
 
     def test_get_spec_of_an_alias_round_trips(self, editable):
         spec = get_spec(editable, kind="tag", name="an_alias_tag", path=EXAMPLE)
         spec = spec.get("spec", spec)
         spec = {**spec, "name": "CopiedAlias"}
         self._add(editable, [spec], scope="MainProgram")
-        program = _read(editable, "out.L5X").programs["MainProgram"]
+        program = _read(editable, OUT + "out.L5X").programs["MainProgram"]
         assert program.tags["CopiedAlias"].alias_for == "Local:1:I.Pt01.Data"
 
 
@@ -266,7 +300,7 @@ class TestRemoveTags:
         )
 
         assert result["removed"] == [{"name": "consumed_tag", "scope": "controller"}]
-        assert "consumed_tag" not in _read(editable, "out.L5X").controller_tags
+        assert "consumed_tag" not in _read(editable, OUT + "out.L5X").controller_tags
 
     def test_reports_logic_still_using_the_tag(self, editable):
         result = remove_tags(
@@ -305,7 +339,7 @@ class TestRenameTag:
         )
 
         assert result["renamed"] == {"from": "input_ok", "to": "input_ok2"}
-        program = _read(editable, "out.L5X").programs["SafetyProgram"]
+        program = _read(editable, OUT + "out.L5X").programs["SafetyProgram"]
         assert "input_ok2" in program.tags
         assert "input_ok" not in program.tags
         assert result["references"]["total"] >= 3
@@ -336,7 +370,7 @@ class TestRenameTag:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
 
 class TestSetTagValues:
@@ -356,7 +390,7 @@ class TestSetTagValues:
                 "\\PeriodicProgram.test_dint": 7,
             },
             output_path="out.L5X",
-            path="base.L5X",
+            path=OUT + "base.L5X",
         )
 
         assert set(result["set"]) == {
@@ -364,7 +398,7 @@ class TestSetTagValues:
             "Delay",
             "\\PeriodicProgram.test_dint",
         }
-        project = _read(editable, "out.L5X")
+        project = _read(editable, OUT + "out.L5X")
         assert project.controller_tags["consumed_tag"].value == 42
         assert project.controller_tags["Delay"].to_python()["PRE"] == 1500
         assert project.programs["PeriodicProgram"].tags["test_dint"].value == 7
@@ -384,10 +418,10 @@ class TestSetTagValues:
             editable,
             values={"Arr[2]": 9, "T1.PRE": 500},
             output_path="out.L5X",
-            path="base.L5X",
+            path=OUT + "base.L5X",
         )
 
-        tags = load(str(editable.root / "out.L5X")).controller_tags
+        tags = load(str(editable.root / OUT_DIR / "out.L5X")).controller_tags
         assert tags["Arr"].to_python() == [0, 0, 9, 0]
         assert tags["T1"].to_python()["PRE"] == 500
 
@@ -399,7 +433,7 @@ class TestSetTagValues:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_unknown_operand_is_reported(self, editable):
         with pytest.raises(ItemNotFoundError, match="Tag 'nope' not found"):
@@ -433,14 +467,21 @@ class TestUpdateTag:
             path=EXAMPLE,
         )
         assert (
-            _read(editable, "set.L5X").controller_tags[name].description == "Documented"
+            _read(editable, OUT + "set.L5X").controller_tags[name].description
+            == "Documented"
         )
 
         result = update_tag(
-            editable, name=name, description="", output_path="clear.L5X", path="set.L5X"
+            editable,
+            name=name,
+            description="",
+            output_path="clear.L5X",
+            path=OUT + "set.L5X",
         )
         assert result["changed"] == ["description"]
-        assert _read(editable, "clear.L5X").controller_tags[name].description == ""
+        assert (
+            _read(editable, OUT + "clear.L5X").controller_tags[name].description == ""
+        )
 
     def test_sets_operand_comments_and_metadata(self, editable):
         add_tags(
@@ -456,11 +497,11 @@ class TestUpdateTag:
             operand_comments={".DN": "Motor started"},
             operand_metadata={".PRE": {"engineering_unit": "ms"}},
             output_path="out.L5X",
-            path="base.L5X",
+            path=OUT + "base.L5X",
         )
 
         assert result["changed"] == ["comment .DN", "engineering_unit .PRE"]
-        tag = _read(editable, "out.L5X").controller_tags["Delay"]
+        tag = _read(editable, OUT + "out.L5X").controller_tags["Delay"]
         assert tag.operand_comments[".DN"] == "Motor started"
         assert tag.operand_metadata[".PRE"]["engineering_unit"] == "ms"
 

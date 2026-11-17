@@ -9,6 +9,9 @@ from pathlib import Path
 from py_l5x import load
 from py_l5x.parsers.project import Project
 
+#: Folder (relative to the root) where write tools put bare output file names.
+DEFAULT_OUTPUT_DIR = "l5x-mcp-output"
+
 
 class L5XError(ValueError):
     """Base exception for all user-facing L5X errors."""
@@ -79,14 +82,21 @@ def lookup[T](collection: Mapping[str, T], name: str, kind: str) -> T:
 class ProjectRegistry:
     """Registry for discovering and caching L5X project files."""
 
-    def __init__(self, root: str | Path | None = None) -> None:
+    def __init__(
+        self, root: str | Path | None = None, output_dir: str | Path | None = None
+    ) -> None:
         """Initialize the registry with a root directory.
 
         Args:
             root: Root directory for searching. Defaults to current working directory.
+            output_dir: Folder for bare output file names (see
+                ``editing.resolve_output``); relative to the root, or absolute
+                inside it. Defaults to :data:`DEFAULT_OUTPUT_DIR`. Not created
+                until a file is written.
 
         Raises:
-            L5XError: If root is not a directory.
+            L5XError: If root is not a directory, or output_dir is outside the
+                root or is the root itself.
         """
         if root is None:
             self.root = Path.cwd().resolve()
@@ -95,6 +105,17 @@ class ProjectRegistry:
 
         if not self.root.is_dir():
             raise L5XError(f"Root directory does not exist: {self.root}")
+
+        out = Path(output_dir or DEFAULT_OUTPUT_DIR).expanduser()
+        if not out.is_absolute():
+            out = self.root / out
+        out = out.resolve()
+        if out == self.root or not out.is_relative_to(self.root):
+            raise L5XError(
+                f"Output directory must be a folder inside the server root "
+                f"{self.root}: {output_dir or DEFAULT_OUTPUT_DIR}"
+            )
+        self.output_dir = out
 
         self._cache: dict[Path, tuple[int, int, Project]] = {}
         self._lock = threading.Lock()
@@ -129,6 +150,17 @@ class ProjectRegistry:
         except OSError:
             return False
         return recorded == (stat.st_mtime_ns, stat.st_size)
+
+    def is_output(self, path: Path) -> bool:
+        """Return whether ``path`` is inside the output folder.
+
+        Args:
+            path: A file path.
+
+        Returns:
+            ``True`` if the path is under ``output_dir``.
+        """
+        return Path(path).resolve().is_relative_to(self.output_dir)
 
     def discover(self, subdir: str | None = None) -> list[Path]:
         """Recursively discover .L5X files under root directory.
@@ -180,7 +212,8 @@ class ProjectRegistry:
         """Resolve a project file path.
 
         Args:
-            path: File path (absolute, relative to root, or None for auto-discovery).
+            path: File path (absolute, relative to root, or None for
+                auto-discovery, which ignores files in the output folder).
 
         Returns:
             Resolved absolute path to the project file.
@@ -191,7 +224,14 @@ class ProjectRegistry:
         """
         if path is None or path == "":
             # Auto-discovery mode
-            discovered = self.discover()
+            everything = self.discover()
+            discovered = [p for p in everything if not self.is_output(p)]
+            if len(discovered) == 0 and everything:
+                raise ProjectNotFoundError(
+                    f"No source .L5X files found under {self.root}. The outputs in "
+                    f"{self.relpath(self.output_dir)}/ are skipped by "
+                    "auto-discovery; pass `path` to the file you want."
+                )
             if len(discovered) == 0:
                 raise ProjectNotFoundError(
                     f"No .L5X files found under {self.root}. "

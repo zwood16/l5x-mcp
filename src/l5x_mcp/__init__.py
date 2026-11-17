@@ -8,6 +8,7 @@ import re
 from collections.abc import Sequence
 
 ROOT_ENV_VAR = "L5X_MCP_ROOT"
+OUTPUT_DIR_ENV_VAR = "L5X_MCP_OUTPUT_DIR"
 STRUCTURED_OUTPUT_ENV_VAR = "L5X_MCP_STRUCTURED_OUTPUT"
 READ_ONLY_ENV_VAR = "L5X_MCP_READ_ONLY"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
@@ -30,6 +31,17 @@ def _root_argument(value: str) -> str:
     return value
 
 
+def _output_dir_argument(value: str) -> str:
+    if re.search(r"\$\{[^}]+\}", value):
+        raise argparse.ArgumentTypeError(
+            f"Output directory contains an unresolved configuration variable: "
+            f"{value!r}. Variables such as ${{workspaceFolder}} must be expanded by "
+            "the MCP client, not by this server. Provide a literal folder via "
+            f"--output-dir or {OUTPUT_DIR_ENV_VAR}."
+        )
+    return value
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="l5x-mcp",
@@ -43,6 +55,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "Directory to search for .L5X files and resolve relative paths against. "
             f"Defaults to {ROOT_ENV_VAR} or the current working directory. "
             "Configuration variables must be expanded by the MCP client."
+        ),
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=_output_dir_argument,
+        default=os.environ.get(OUTPUT_DIR_ENV_VAR) or None,
+        help=(
+            "Folder where write tools put bare output file names, relative to the "
+            "root (or absolute inside it). Defaults to "
+            f"{OUTPUT_DIR_ENV_VAR} or l5x-mcp-output."
         ),
     )
     parser.add_argument(
@@ -81,7 +103,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     from l5x_mcp.server import create_server
 
     create_server(
-        ProjectRegistry(args.root),
+        ProjectRegistry(args.root, args.output_dir),
         structured_output=args.structured_output,
         read_only=args.read_only,
     ).run(transport=args.transport)

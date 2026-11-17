@@ -1,14 +1,21 @@
 # l5x-mcp
 
-A personal project to add AI tools to my Studio 5000 workflow.
+> A set of tools to interact with and generate L5X files
 
 ## What it is
 
-This is a Model Context Protocol (MCP) server for Rockwell Automation Studio 5000 Logix Designer projects exported as `.L5X` (XML) files. It allows LLM coding agents (VS Code Copilot Chat, GitHub Copilot CLI) to explore project structure, list programs and routines, examine logic code, look up tags and data types, and find cross-references—without reading the large raw XML themselves.
+This is a Model Context Protocol (MCP) server for Rockwell Automation Studio 5000 Logix Designer projects exported as `.L5X` (XML) files. It allows coding agents (Claude Code, VS Code Copilot Chat, etc.) to explore project structure, list programs and routines, examine logic code, look up tags and data types, and find cross-references without reading the large raw XML themselves.
 
-It can also **edit projects and create components** (UDTs, AOIs, programs, routines, rungs, tags) as Studio import files. Write tools never modify their input: every edit is written to a new `.L5X` file. Run with `--read-only` to expose only the read tools (see [Write tools](#write-tools)).
+It can also edit projects and create components (UDTs, AOIs, programs, routines, rungs, tags) as Studio 5000 import files. Write tools never modify their input: every edit is written to a new `.L5X` file. Run with `--read-only` flag to expose only the read tools (see [Write tools](#write-tools)).
 
-**Important limitations:** This is work in progress. The underlying `py_l5x` parser currently supports **RLL (ladder rungs) and ST (structured text) routines only**. FBD (function block diagram) and SFC (sequential function chart) routines are recognized but their logic is not parsed; tools will return a note that these types are unsupported.
+> [!IMPORTANT]
+> The underlying `py_l5x` parser currently supports **RLL (ladder rungs) and ST (structured text) routines only**. FBD (function block diagram) and SFC (sequential function chart) routines are recognized but their logic is not parsed; tools will return a note that these types are unsupported.
+
+**Related Projects**
+
+- [Studio 5000 Doc MCP](https://github.com/zwood16/studio5000-docs-mcp): an MCP server to allow AI to read through all Studio 5000 docs installed on your PC
+- [py_l5x](https://github.com/zwood16/py_l5x): the underlying Python L5X parser used in this project
+- [ACD Auto Export](https://github.com/zwood16/acd-auto-export): a companion script that automatically exports your active Studio 5000 project (`.acd` file) to the more usable `.l5x` file format using the Studio 5000 SDK every time you save.
 
 ## Requirements
 
@@ -41,7 +48,7 @@ The server searches for `.L5X` files starting from a root directory:
 
 1. **Root directory precedence:** `--root` CLI argument > `L5X_MCP_ROOT` environment variable > current working directory
 2. **Recursive discovery:** Searches subdirectories recursively, skipping hidden directories, `node_modules/`, `__pycache__/`, and `venv/`
-3. **Auto-selection:** When exactly one `.L5X` file exists, it is automatically used as the default; all tools accept an optional `path` argument to explicitly specify a file (absolute or relative to root)
+3. **Auto-selection:** When exactly one `.L5X` file exists, it is automatically used as the default; all tools accept an optional `path` argument to explicitly specify a file (absolute or relative to root). Files in the write tools' output folder (`l5x-mcp-output/` by default, see [Write tools](#write-tools)) are skipped here, so edits don't break auto-selection of the source project. `list_l5x_files` still lists them, marked `"output": true`.
 4. **Auto-reload:** The server detects file changes (mtime and size) and re-parses the project automatically
 
 The root is selected at server startup. It is the server process's working
@@ -243,26 +250,26 @@ GitHub Copilot CLI (`~/.copilot/mcp-config.json` or `.mcp.json`), flag set throu
 
 ## Tools Reference
 
-| Tool Name             | Purpose                                                                                                                                         | Key Arguments                                                                                                                                  |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **list_l5x_files**    | Discover .L5X files with size, mtime, target type and name                                                                                       | `subdir=None`                                                                                                                                  |
-| **project_overview**  | Summarize controller, tasks, programs, AOIs, UDTs, modules and counts (including `module_io_tags`)                                              | `path=None`                                                                                                                                    |
-| **list_tasks**        | List tasks with type, rate, priority, watchdog and scheduled programs                                                                            | `path=None`                                                                                                                                    |
-| **get_task**          | Get task detail: type, rate, watchdog, event info, scheduled programs                                                                            | `name`, `path=None`                                                                                                                            |
-| **list_programs**     | List programs: main routine, disabled/safety flags, routine and tag counts, scheduled task                                                      | `path=None`                                                                                                                                    |
-| **get_program**       | Get program detail: routines, flags, tag_count; the tag list only with `include_tags=True` (otherwise a hint to use `list_tags`)               | `name`, `include_tags=False`, `path=None`                                                                                                      |
-| **list_routines**     | List routines in a program or AOI with type and rung/line counts                                                                                 | `program=None`, `aoi=None`, `path=None`                                                                                                        |
+| Tool Name             | Purpose                                                                                                                                                                  | Key Arguments                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **list_l5x_files**    | Discover .L5X files with size, mtime, target type and name                                                                                                               | `subdir=None`                                                                                                                                                              |
+| **project_overview**  | Summarize controller, tasks, programs, AOIs, UDTs, modules and counts (including `module_io_tags`)                                                                       | `path=None`                                                                                                                                                                |
+| **list_tasks**        | List tasks with type, rate, priority, watchdog and scheduled programs                                                                                                    | `path=None`                                                                                                                                                                |
+| **get_task**          | Get task detail: type, rate, watchdog, event info, scheduled programs                                                                                                    | `name`, `path=None`                                                                                                                                                        |
+| **list_programs**     | List programs: main routine, disabled/safety flags, routine and tag counts, scheduled task                                                                               | `path=None`                                                                                                                                                                |
+| **get_program**       | Get program detail: routines, flags, tag_count; the tag list only with `include_tags=True` (otherwise a hint to use `list_tags`)                                         | `name`, `include_tags=False`, `path=None`                                                                                                                                  |
+| **list_routines**     | List routines in a program or AOI with type and rung/line counts                                                                                                         | `program=None`, `aoi=None`, `path=None`                                                                                                                                    |
 | **get_routine_logic** | Get RLL rungs or ST lines. `detail`: `full`, `outline` (comments only) or `logic` (code only). Returns an `operands` map. Paged by `max_chars` budget (max 200 per call) | `routine`, `program=None`, `aoi=None`, `start_rung=None`, `end_rung=None`, `detail='full'`, `max_chars=8000`, `include_operands=True`, `include_values=False`, `path=None` |
-| **list_tags**         | List tags in `scope`: `controller`, `module_io` (module I/O tags such as `Local:1:I`), or a program name; filter and paginate                    | `scope='controller'`, `name_contains=None`, `data_type=None`, `tag_type=None`, `limit=100`, `offset=0`, `path=None`                           |
-| **get_tag**           | Get a tag, or the value at an operand path: members, `[i]`/`[i,j]`, bits, module I/O names, `\Program.Tag`. Follows aliases                    | `name`, `scope=None`, `max_depth=3`, `max_elements=32`, `path=None`                                                                            |
-| **list_data_types**   | List user-defined data types (UDTs) with member counts and string flags                                                                         | `path=None`                                                                                                                                    |
-| **get_data_type**     | Get UDT members with metadata, which UDTs/AOIs use it, and how many tags have this type                                                         | `name`, `path=None`                                                                                                                            |
-| **list_aois**         | List Add-On Instructions with revision, parameter count and routine names                                                                       | `path=None`                                                                                                                                    |
-| **get_aoi**           | Get AOI parameters (with `operand_comments`), local tags, routines, instances; optionally logic text within a `max_chars` budget                | `name`, `include_logic=False`, `max_chars=8000`, `path=None`                                                                                   |
-| **list_modules**      | List I/O modules with `tag_prefix`, address, and a hierarchy `tree` (remote racks nested under their adapter)                                   | `path=None`                                                                                                                                    |
-| **get_module**        | Get module detail: identity, ports, communications, `io_tags` (global names such as `ShopRobot:I`), children                                    | `name`, `include_data=False`, `max_depth=2`, `max_elements=32`, `path=None`                                                                    |
-| **find_references**   | Find uses of a tag, instruction, or text in program and AOI logic. Comments are ignored for `tag`/`instruction` on ST                           | `query`, `kind='tag'` (`tag`/`instruction`/`text`), `program=None`, `include_aois=True`, `limit=200`, `path=None`                              |
-| **instruction_usage** | Count instruction mnemonics used across all programs (or limit to one)                                                                          | `program=None`, `path=None`                                                                                                                    |
+| **list_tags**         | List tags in `scope`: `controller`, `module_io` (module I/O tags such as `Local:1:I`), or a program name; filter and paginate                                            | `scope='controller'`, `name_contains=None`, `data_type=None`, `tag_type=None`, `limit=100`, `offset=0`, `path=None`                                                        |
+| **get_tag**           | Get a tag, or the value at an operand path: members, `[i]`/`[i,j]`, bits, module I/O names, `\Program.Tag`. Follows aliases                                              | `name`, `scope=None`, `max_depth=3`, `max_elements=32`, `path=None`                                                                                                        |
+| **list_data_types**   | List user-defined data types (UDTs) with member counts and string flags                                                                                                  | `path=None`                                                                                                                                                                |
+| **get_data_type**     | Get UDT members with metadata, which UDTs/AOIs use it, and how many tags have this type                                                                                  | `name`, `path=None`                                                                                                                                                        |
+| **list_aois**         | List Add-On Instructions with revision, parameter count and routine names                                                                                                | `path=None`                                                                                                                                                                |
+| **get_aoi**           | Get AOI parameters (with `operand_comments`), local tags, routines, instances; optionally logic text within a `max_chars` budget                                         | `name`, `include_logic=False`, `max_chars=8000`, `path=None`                                                                                                               |
+| **list_modules**      | List I/O modules with `tag_prefix`, address, and a hierarchy `tree` (remote racks nested under their adapter)                                                            | `path=None`                                                                                                                                                                |
+| **get_module**        | Get module detail: identity, ports, communications, `io_tags` (global names such as `ShopRobot:I`), children                                                             | `name`, `include_data=False`, `max_depth=2`, `max_elements=32`, `path=None`                                                                                                |
+| **find_references**   | Find uses of a tag, instruction, or text in program and AOI logic. Comments are ignored for `tag`/`instruction` on ST                                                    | `query`, `kind='tag'` (`tag`/`instruction`/`text`), `program=None`, `include_aois=True`, `limit=200`, `path=None`                                                          |
+| **instruction_usage** | Count instruction mnemonics used across all programs (or limit to one)                                                                                                   | `program=None`, `path=None`                                                                                                                                                |
 
 ## Write tools
 
@@ -273,9 +280,17 @@ Rules shared by every write tool:
 
 - The source project (`path`) is **never modified**. The result is written to
   `output_path`, which is required, must end in `.L5X`, must be inside the server root,
-  and must not be the source file. An existing output is only replaced with
-  `overwrite=true`.
-- To chain edits, pass the previous call's output as the next call's `path`.
+  and must not be the source file.
+- A bare file name such as `step1.L5X` is written to the output folder,
+  `l5x-mcp-output/` under the root. Change it with `--output-dir` or
+  `L5X_MCP_OUTPUT_DIR` (relative to the root, or an absolute path inside it). A path
+  with a directory part, such as `edits/step1.L5X`, is relative to the root.
+- An existing file is never replaced unless you pass `overwrite=true`, and even then
+  only if a write tool wrote it earlier in the same server session and it hasn't changed
+  since. Other `.L5X` files in the root, and outputs from before a server restart, are
+  never replaced.
+- To chain edits, pass the previous call's output (the `file` in its result) as the
+  next call's `path`.
 - Edits are all-or-nothing: if any part fails, no file is written.
 - Renames and removals of tags, routines and programs don't rewrite logic. The result
   lists the remaining `references` so they can be fixed. `rename_aoi` does rewrite call
@@ -289,21 +304,21 @@ each tool's input schema. `get_spec` returns an existing object's spec in exactl
 form the add/replace tools accept, so the usual way to change an object is
 `get_spec` → edit → `replace_*`.
 
-| Tool | Purpose |
-| --- | --- |
-| **get_spec** (read-only) | Spec of an existing UDT, AOI, program, tag or routine |
-| **add_tags** / **remove_tags** / **rename_tag** | Add base or alias tags (with values and operand comments), remove or rename tags |
-| **set_tag_values** | Set values by operand path: scalars, structure members, array elements, strings, TIME |
-| **update_tag** | Tag description, operand comments and operand metadata (units, min/max, states) |
-| **add_routine** / **remove_routine** / **rename_routine** | Program routines (RLL or ST) |
-| **add_rungs** / **replace_rung** / **remove_rungs** | Ladder rungs (insert, change text or comment, delete) |
-| **set_st_lines** | Replace an ST routine's source |
-| **add_data_type** / **replace_data_type** / **rename_data_type** / **remove_data_type** | UDTs. Replace migrates every instance by member name, the way Studio does |
-| **add_aoi** / **replace_aoi** / **rename_aoi** / **remove_aoi** | AOIs. Replace migrates instances and protects call sites from signature changes |
-| **add_program** / **replace_program** / **rename_program** / **remove_program** | Programs with tags and routines |
-| **schedule_program** | Schedule, move or unschedule a program |
-| **set_description** | Description of a program, routine, UDT or AOI |
-| **export_component** | Write existing objects (UDT, AOI, program, routine, rungs, tags) as an Import Component file with their dependencies |
+| Tool                                                                                                                                               | Purpose                                                                                                                |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **get_spec** (read-only)                                                                                                                           | Spec of an existing UDT, AOI, program, tag or routine                                                                  |
+| **add_tags** / **remove_tags** / **rename_tag**                                                                                                    | Add base or alias tags (with values and operand comments; an alias target must exist), remove or rename tags           |
+| **set_tag_values**                                                                                                                                 | Set values by operand path: scalars, structure members, array elements, strings, TIME                                  |
+| **update_tag**                                                                                                                                     | Tag description, operand comments and operand metadata (units, min/max, states)                                        |
+| **add_routine** / **remove_routine** / **rename_routine**                                                                                          | Program routines (RLL or ST)                                                                                           |
+| **add_rungs** / **replace_rung** / **remove_rungs**                                                                                                | Ladder rungs (insert, change text or comment, delete)                                                                  |
+| **set_st_lines**                                                                                                                                   | Replace an ST routine's source                                                                                         |
+| **add_data_type** / **replace_data_type** / **rename_data_type** / **remove_data_type**                                                            | UDTs. Replace migrates every instance by member name, the way Studio does                                              |
+| **add_aoi** / **replace_aoi** / **rename_aoi** / **remove_aoi**                                                                                    | AOIs. Replace migrates instances and protects call sites from signature changes                                        |
+| **add_program** / **replace_program** / **rename_program** / **remove_program**                                                                    | Programs with tags and routines                                                                                        |
+| **schedule_program**                                                                                                                               | Schedule, move or unschedule a program                                                                                 |
+| **set_description**                                                                                                                                | Description of a program, routine, UDT or AOI                                                                          |
+| **export_component**                                                                                                                               | Write existing objects (UDT, AOI, program, routine, rungs, tags) as an Import Component file with their dependencies   |
 | **create_data_type_file** / **create_aoi_file** / **create_program_file** / **create_tags_file** / **create_routine_file** / **create_rungs_file** | Build a new component from a spec as an Import Component file. `context_path` supplies the UDTs, AOIs and tags it uses |
 
 Generated files are verified against real Studio 5000 **v37 and v38** through the
@@ -354,7 +369,7 @@ including component exports (AOI, program, routine, rung, module, data type).
 ```
 l5x-mcp/
 ├── src/l5x_mcp/
-│   ├── __init__.py           # CLI entry point and arg parsing (--root, --structured-output, --read-only)
+│   ├── __init__.py           # CLI entry point and arg parsing (--root, --output-dir, --structured-output, --read-only)
 │   ├── __main__.py           # Module runner
 │   ├── server.py             # MCPServer creation, tool registration, INSTRUCTIONS
 │   ├── registry.py           # Project discovery and caching

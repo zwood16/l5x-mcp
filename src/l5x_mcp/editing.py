@@ -5,7 +5,10 @@ project (never the registry's cached object, which read tools share), apply
 the change with py_l5x, and write the result to a separate ``output_path``.
 The source file is never modified.
 
-Output paths are confined to the registry root, must end in ``.L5X``, must
+A bare ``output_path`` file name is written to the registry's output folder
+(``registry.output_dir``, default ``l5x-mcp-output`` under the root), which
+auto-discovery skips; a path with a directory part is root-relative. Output
+paths are confined to the registry root, must end in ``.L5X``, must
 differ from the source, and refuse to replace an existing file. With
 ``overwrite=True`` only a file this server process wrote earlier (and that has
 not changed since) may be replaced, so other projects in the root can never be
@@ -70,7 +73,8 @@ def resolve_output(
 
     Args:
         registry: Registry whose root confines the output.
-        output_path: Absolute or root-relative destination path.
+        output_path: A bare file name (written to ``registry.output_dir``), or
+            an absolute or root-relative path (which must be inside the root).
         source: The project being edited; the output may not be this file.
         overwrite: Allow replacing an existing file, but only one that this
             server wrote earlier in this session and that is unchanged since
@@ -89,7 +93,8 @@ def resolve_output(
         raise L5XError("output_path is required")
     raw = Path(output_path).expanduser()
     if not raw.is_absolute():
-        raw = registry.root / raw
+        base = registry.output_dir if raw.parent == Path() else registry.root
+        raw = base / raw
     out = raw.resolve()
     try:
         out.relative_to(registry.root)

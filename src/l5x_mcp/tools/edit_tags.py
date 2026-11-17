@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from py_l5x import AliasTag, ModuleTagRef, Tag, build_tag
@@ -118,8 +119,8 @@ def add_tags(
     Args:
         registry: ProjectRegistry to load from.
         tags: Tag specs to add, in order.
-        output_path: New .L5X file to write (inside the server root; must not
-            be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         scope: "controller" (default) or a program name.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -139,14 +140,11 @@ def add_tags(
                     f"tag {spec.name!r}: data_type (or alias_for) is required"
                 )
             check_data_type(edit.project, spec.data_type)
+    # Before adding, so error messages do not list the batch's own names.
+    check_spec_aliases(edit.project, specs, scope_name)
+    for spec in specs:
         with edit_errors(f"tag {spec.name!r}"):
             _add_tag_spec(collection, spec)
-    batch = {spec.name.lower() for spec in specs}
-    for spec in specs:
-        if spec.alias_for:  # after all adds: forward references are allowed
-            check_alias_target(
-                edit.project, spec.alias_for, scope_name, spec.name, batch
-            )
     return edit.save({"scope": scope_name, "added": [spec.name for spec in specs]})
 
 
@@ -155,8 +153,9 @@ def check_spec_aliases(
 ) -> None:
     """Check the alias targets of tag specs that are not in the project yet.
 
-    A target is accepted if its base is a tag of the same spec list, a
-    controller tag, or a module I/O tag of ``project``.
+    A target is accepted if its base is a base tag of the same spec list, a
+    controller tag, or a module I/O tag of ``project``. Alias chains inside the
+    list are followed; a cycle (including a self alias) is an error.
 
     Args:
         project: The project to resolve against (edited or context project).
@@ -166,7 +165,7 @@ def check_spec_aliases(
     Raises:
         L5XError: If an alias target cannot be found.
     """
-    batch = {t.name.lower() for t in tags}
+    batch = {t.name.lower(): t for t in tags}
     for tag in tags:
         if tag.alias_for:
             check_alias_target(project, tag.alias_for, scope, tag.name, batch)
@@ -194,7 +193,7 @@ def check_alias_target(
     alias_for: str,
     scope: str,
     alias_name: str | None = None,
-    batch: set[str] | frozenset[str] = frozenset(),
+    batch: Mapping[str, Any] | None = None,
 ) -> None:
     """Check that an alias target exists, including members, bits and indexes.
 
@@ -204,30 +203,42 @@ def check_alias_target(
         scope: ``"controller"`` or a program name (program tags are searched
             first, then controller tags). Module I/O names always resolve.
         alias_name: The alias's name, for the error message.
-        batch: Lower-case names of tags being added together with the alias;
-            a target whose base is one of them is accepted without walking
-            its path (such tags may have no data yet).
+        batch: ``{lower-case name: TagSpec}`` of the tags being added together
+            with the alias (not yet in ``project``). A target whose base is a
+            base tag of the batch is accepted without walking its path (it
+            may have no data yet). A base that is another alias of the batch
+            is followed through the batch specs.
 
     Raises:
-        L5XError: If the target cannot be found.
+        L5XError: If the target cannot be found, or aliases form a cycle.
     """
+    batch = batch or {}
     label = f"alias {alias_name!r}: " if alias_name else "alias: "
-    parsed = parse_operand(alias_for)
-    if parsed.program is None and parsed.base.lower() in batch:
-        return
+    chain = [alias_name] if alias_name else []
+    target = alias_for
+    while True:
+        parsed = parse_operand(target)
+        spec = batch.get(parsed.base.lower()) if parsed.program is None else None
+        if spec is None:
+            break
+        if not spec.alias_for:
+            return
+        if spec.name.lower() in (c.lower() for c in chain):
+            cycle = " -> ".join([*chain, spec.name])
+            raise L5XError(f"{label}alias cycle {cycle}")
+        chain.append(spec.name)
+        target = spec.alias_for
     use = scope
     if parsed.program is None and scope != "controller" and ":" not in parsed.base:
         program = lookup(project.programs, scope, "Program")
         if not any(k.lower() == parsed.base.lower() for k in program.tags):
             use = "controller"
     try:
-        resolved = resolve_tag(
-            project, alias_for, scope=None if parsed.program else use
-        )
+        resolved = resolve_tag(project, target, scope=None if parsed.program else use)
     except L5XError as exc:
-        raise L5XError(f"{label}target {alias_for!r} not found: {exc}") from exc
+        raise L5XError(f"{label}target {target!r} not found: {exc}") from exc
     if resolved.alias_error:
-        raise L5XError(f"{label}target {alias_for!r} not found: {resolved.alias_error}")
+        raise L5XError(f"{label}target {target!r} not found: {resolved.alias_error}")
 
 
 def _apply_operand_metadata(
@@ -268,7 +279,8 @@ def remove_tags(
     Args:
         registry: ProjectRegistry to load from.
         names: Tag names to remove.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         scope: None (controller first, then programs), "controller", or a
             program name.
         path: Source .L5X file (None for auto-discovery). Never modified.
@@ -318,7 +330,8 @@ def rename_tag(
         registry: ProjectRegistry to load from.
         name: Current tag name.
         new_name: New tag name (Logix naming rules; unique in its scope).
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         scope: None (controller first, then programs), "controller", or a
             program name.
         path: Source .L5X file (None for auto-discovery). Never modified.
@@ -365,7 +378,8 @@ def set_tag_values(
     Args:
         registry: ProjectRegistry to load from.
         values: {operand path: value}.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         scope: None (controller first, then programs), "controller", or a
             program name; "\\Program.tag" operands select a program directly.
         path: Source .L5X file (None for auto-discovery). Never modified.
@@ -440,7 +454,8 @@ def update_tag(
     Args:
         registry: ProjectRegistry to load from.
         name: Tag name (not an operand path).
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         scope: None (controller first, then programs), "controller", or a
             program name.
         description: New description; "" removes it; omit to keep.

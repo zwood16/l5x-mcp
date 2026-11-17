@@ -64,7 +64,8 @@ def add_routine(
         registry: ProjectRegistry to load from.
         program: Program to add the routine to.
         name: New routine name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         type: "RLL" (ladder, default) or "ST" (structured text).
         description: Routine description.
         rungs: RLL rungs in order.
@@ -110,7 +111,8 @@ def remove_routine(
         registry: ProjectRegistry to load from.
         program: Program name.
         name: Routine name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -147,7 +149,8 @@ def rename_routine(
         program: Program name.
         name: Current routine name.
         new_name: New routine name.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -192,7 +195,8 @@ def add_rungs(
         program: Program name.
         routine: RLL routine name.
         rungs: Rungs to insert, in order ([{text, comment?}]).
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         index: Insert position (0 = first); omit to append.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
@@ -242,7 +246,8 @@ def replace_rung(
         program: Program name.
         routine: RLL routine name.
         number: Rung number (0-based).
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         text: New neutral rung text.
         comment: New rung comment ("" removes it).
         path: Source .L5X file (None for auto-discovery). Never modified.
@@ -295,7 +300,8 @@ def remove_rungs(
         program: Program name.
         routine: RLL routine name.
         numbers: Rung numbers to remove.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -345,7 +351,8 @@ def set_st_lines(
         program: Program name.
         routine: ST routine name.
         lines: The new ST source lines.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         path: Source .L5X file (None for auto-discovery). Never modified.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 

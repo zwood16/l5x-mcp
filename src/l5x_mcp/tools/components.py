@@ -173,7 +173,8 @@ def export_component(
     Args:
         registry: ProjectRegistry to load from.
         kind: What to export.
-        output_path: New .L5X file to write (must not be the source file).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         names: Object names (all kinds except "rungs").
         program: Program for routine, rungs and program tags.
         routine: Routine for rungs.
@@ -252,7 +253,8 @@ def create_data_type_file(
     Args:
         registry: ProjectRegistry to load from.
         spec: The UDT spec.
-        output_path: New .L5X file to write (inside the server root).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         context_path: Optional project whose UDTs/AOIs the spec may use.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -292,7 +294,8 @@ def create_aoi_file(
     Args:
         registry: ProjectRegistry to load from.
         spec: The AOI spec.
-        output_path: New .L5X file to write (inside the server root).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         context_path: Optional project whose UDTs/AOIs the spec may use.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -332,7 +335,8 @@ def create_program_file(
     Args:
         registry: ProjectRegistry to load from.
         spec: The program spec.
-        output_path: New .L5X file to write (inside the server root).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         context_path: Optional project whose UDTs/AOIs/tags the program uses.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -371,7 +375,8 @@ def create_tags_file(
     Args:
         registry: ProjectRegistry to load from.
         tags: Tag specs.
-        output_path: New .L5X file to write (inside the server root).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         context_path: Optional project whose UDTs/AOIs the tags use.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -425,7 +430,8 @@ def create_routine_file(
         registry: ProjectRegistry to load from.
         program: Program the routine belongs to.
         routine: The routine spec (name, type, rungs or lines, description).
-        output_path: New .L5X file to write (inside the server root).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         context_path: Optional project with the tags/types the logic uses.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
@@ -478,7 +484,8 @@ def create_rungs_file(
         program: Program of the target routine.
         routine: Target RLL routine.
         rungs: Rungs in order ([{text, comment?}]).
-        output_path: New .L5X file to write (inside the server root).
+        output_path: New .L5X file (a bare name is written to the output
+            folder; a path is root-relative). Must not be the source.
         context_path: Optional project with the tags/types the rungs use.
         overwrite: Replace output_path if this server wrote it earlier in this session.
 

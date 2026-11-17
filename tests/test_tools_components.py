@@ -3,7 +3,7 @@
 import pytest
 from py_l5x import load
 
-from l5x_mcp.registry import L5XError
+from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, L5XError
 from l5x_mcp.tools.components import (
     create_aoi_file,
     create_data_type_file,
@@ -14,6 +14,8 @@ from l5x_mcp.tools.components import (
     export_component,
 )
 
+OUT_DIR = DEFAULT_OUTPUT_DIR
+OUT = OUT_DIR + "/"
 EXAMPLE = "example.L5X"
 
 
@@ -31,7 +33,7 @@ class TestExportComponent:
             path=EXAMPLE,
         )
 
-        component = _load(editable, "udt.L5X")
+        component = _load(editable, OUT + "udt.L5X")
         assert result["target_type"] == "DataType"
         assert component.target_type == "DataType"
         assert component.target.name == "simple_udt"
@@ -46,7 +48,7 @@ class TestExportComponent:
             path=EXAMPLE,
         )
 
-        component = _load(editable, "aoi.L5X")
+        component = _load(editable, OUT + "aoi.L5X")
         assert component.target_type == "AddOnInstructionDefinition"
         assert component.target.name == "FanucRobot"
         assert "SeqCtrl" in component.aois
@@ -62,7 +64,7 @@ class TestExportComponent:
             path=EXAMPLE,
         )
 
-        component = _load(editable, "routine.L5X")
+        component = _load(editable, OUT + "routine.L5X")
         assert result["target_type"] == "Routine"
         assert component.target_type == "Routine"
         assert component.target.name == "SequenceRoutine"
@@ -79,7 +81,7 @@ class TestExportComponent:
             path=EXAMPLE,
         )
 
-        component = _load(editable, "rung.L5X")
+        component = _load(editable, OUT + "rung.L5X")
         assert result["target_type"] == "Rung"
         assert component.target_type == "Rung"
         assert component.target.text == "JSR(SequenceRoutine,0);"
@@ -94,7 +96,7 @@ class TestExportComponent:
             path=EXAMPLE,
         )
 
-        component = _load(editable, "tag.L5X")
+        component = _load(editable, OUT + "tag.L5X")
         assert result["target_type"] == "Tag"
         assert component.target_type == "Tag"
         assert component.target.name == "input_ok"
@@ -108,7 +110,7 @@ class TestExportComponent:
             path=EXAMPLE,
         )
 
-        component = _load(editable, "prog.L5X")
+        component = _load(editable, OUT + "prog.L5X")
         assert component.target_type == "Program"
         assert component.target.name == "MainProgram"
 
@@ -147,7 +149,7 @@ class TestExportComponent:
                 editable,
                 kind="data_type",
                 names=["simple_udt"],
-                output_path=EXAMPLE,
+                output_path=str(editable.root / EXAMPLE),
                 overwrite=True,
                 path=EXAMPLE,
             )
@@ -167,7 +169,7 @@ class TestCreateComponents:
             editable, spec=spec, context_path=EXAMPLE, output_path="cr.L5X"
         )
 
-        component = _load(editable, "cr.L5X")
+        component = _load(editable, OUT + "cr.L5X")
         assert result["target_type"] == "DataType"
         assert component.target.name == "CompUdt"
         assert "A_UDT" in component.data_types
@@ -182,7 +184,7 @@ class TestCreateComponents:
                 spec={"name": "Solo", "members": [{"name": "x", "data_type": "A_UDT"}]},
                 output_path="out.L5X",
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_existing_name_in_context_is_refused(self, editable):
         with pytest.raises(L5XError, match="already exists"):
@@ -205,7 +207,7 @@ class TestCreateComponents:
             editable, spec=spec, context_path=EXAMPLE, output_path="aoi.L5X"
         )
 
-        component = _load(editable, "aoi.L5X")
+        component = _load(editable, OUT + "aoi.L5X")
         assert result["target_type"] == "AddOnInstructionDefinition"
         assert component.target.name == "NewAoi"
         assert component.target.routines["Logic"].rungs[0].text == "XIC(In1)OTE(x);"
@@ -221,7 +223,7 @@ class TestCreateComponents:
         }
         result = create_program_file(editable, spec=spec, output_path="prog.L5X")
 
-        component = _load(editable, "prog.L5X")
+        component = _load(editable, OUT + "prog.L5X")
         assert result["target_type"] == "Program"
         assert component.target.name == "NewProg"
         assert component.programs["NewProg"].tags["Speed"].value == 2.5
@@ -237,7 +239,7 @@ class TestCreateComponents:
             output_path="tags.L5X",
         )
 
-        component = _load(editable, "tags.L5X")
+        component = _load(editable, OUT + "tags.L5X")
         assert result["target_type"] == "Tag"
         assert component.controller_tags["CompTag"].value == 3
         assert "produced_tag" in component.controller_tags
@@ -252,7 +254,7 @@ class TestCreateComponents:
             ],
             output_path="tags.L5X",
         )
-        assert "CompAlias" in _load(editable, "tags.L5X").controller_tags
+        assert "CompAlias" in _load(editable, OUT + "tags.L5X").controller_tags
 
     def test_create_tags_alias_to_missing_tag_needs_context(self, editable):
         with pytest.raises(L5XError, match="context_path"):
@@ -261,7 +263,7 @@ class TestCreateComponents:
                 tags=[{"name": "CompAlias", "alias_for": "produced_tag"}],
                 output_path="tags.L5X",
             )
-        assert not (editable.root / "tags.L5X").exists()
+        assert not (editable.root / OUT_DIR / "tags.L5X").exists()
 
     def test_create_tags_alias_to_missing_tag_in_context_is_refused(self, editable):
         with pytest.raises(L5XError, match="NoSuchTag"):
@@ -282,6 +284,17 @@ class TestCreateComponents:
                 editable, spec=spec, context_path=EXAMPLE, output_path="p.L5X"
             )
 
+    @pytest.mark.parametrize(
+        "tags",
+        [
+            [{"name": "Me", "alias_for": "Me"}],
+            [{"name": "A", "alias_for": "B"}, {"name": "B", "alias_for": "A"}],
+        ],
+    )
+    def test_create_tags_alias_cycles_are_refused(self, editable, tags):
+        with pytest.raises(L5XError, match="alias cycle"):
+            create_tags_file(editable, tags=tags, output_path="tags.L5X")
+
     def test_create_tags_rejects_unknown_type(self, editable):
         with pytest.raises(L5XError, match="NOTATYPE"):
             create_tags_file(
@@ -289,7 +302,7 @@ class TestCreateComponents:
                 tags=[{"name": "X", "data_type": "NOTATYPE"}],
                 output_path="out.L5X",
             )
-        assert not (editable.root / "out.L5X").exists()
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
     def test_create_routine_file_targets_named_program(self, editable):
         result = create_routine_file(
@@ -303,7 +316,7 @@ class TestCreateComponents:
             output_path="rtn.L5X",
         )
 
-        component = _load(editable, "rtn.L5X")
+        component = _load(editable, OUT + "rtn.L5X")
         assert result["targets"] == ["MainProgram/CompRtn"]
         assert component.target_type == "Routine"
         assert component.target.name == "CompRtn"
@@ -317,7 +330,7 @@ class TestCreateComponents:
             output_path="rungs.L5X",
         )
 
-        component = _load(editable, "rungs.L5X")
+        component = _load(editable, OUT + "rungs.L5X")
         assert result["target_type"] == "Rung"
         assert component.target_type == "Rung"
         assert component.target.comment == "x"
@@ -342,7 +355,7 @@ class TestCreateComponents:
                 editable,
                 tags=[{"name": "CompTag", "data_type": "DINT"}],
                 context_path=EXAMPLE,
-                output_path=EXAMPLE,
+                output_path=str(editable.root / EXAMPLE),
                 overwrite=True,
             )
 

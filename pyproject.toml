@@ -1,6 +1,6 @@
 [project]
 name = "l5x-mcp"
-version = "0.1.0"
+version = "0.2.0"
 description = "A simple L5X interface for LLMs"
 readme = "README.md"
 authors = [
