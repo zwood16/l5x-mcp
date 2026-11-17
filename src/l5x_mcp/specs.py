@@ -344,7 +344,13 @@ def to_py_spec(kind: str, data: dict[str, Any]) -> Any:
     try:
         data = dict(data)
         if kind == "data_type":
-            return DataTypeSpec.from_dict(data)
+            spec = DataTypeSpec.from_dict(data)
+            if not spec.members:
+                raise L5XError(
+                    f"Invalid data_type spec {spec.name!r}: a UDT needs at least "
+                    "one member (Studio fails the build with RxE_INVALID_DATA_TYPE)"
+                )
+            return spec
         if kind == "tag":
             return _tag(data)
         if kind == "routine":

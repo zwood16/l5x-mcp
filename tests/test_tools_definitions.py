@@ -174,6 +174,14 @@ class TestDataTypes:
         assert udt.visible_members["Run"].data_type == "BIT"
         assert udt.visible_members["Arr"].dimension == 3
 
+    def test_add_and_replace_without_members_are_refused(self, editable):
+        spec = {"name": "simple_udt", "members": []}
+        with pytest.raises(L5XError, match="at least one member"):
+            add_data_type(editable, spec=spec, output_path="o.L5X", path=EXAMPLE)
+        with pytest.raises(L5XError, match="at least one member"):
+            replace_data_type(editable, spec=spec, output_path="o.L5X", path=EXAMPLE)
+        assert not (editable.root / OUT_DIR / "o.L5X").exists()
+
     def test_add_duplicate_name_is_refused(self, editable):
         with pytest.raises(L5XError, match="simple_udt"):
             add_data_type(
@@ -219,7 +227,7 @@ class TestDataTypes:
         with pytest.raises(L5XError, match="Data type 'Nope' not found"):
             replace_data_type(
                 editable,
-                spec={"name": "Nope", "members": []},
+                spec={"name": "Nope", "members": [{"name": "x", "data_type": "DINT"}]},
                 output_path="out.L5X",
                 path=EXAMPLE,
             )

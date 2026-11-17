@@ -23,6 +23,42 @@ def _read(editable, rel):
     return load(str(editable.root / rel))
 
 
+class TestRoutineTypeGuard:
+    def test_routine_of_unknown_type_is_refused(self, editable):
+        add_routine(editable, "MainProgram", "Blank", output_path="b.L5X", path=EXAMPLE)
+        blank = editable.root / OUT_DIR / "b.L5X"
+        text = blank.read_text()
+        assert '<Routine Name="Blank" Type="RLL"/>' in text
+        (editable.root / "blank.L5X").write_text(
+            text.replace(
+                '<Routine Name="Blank" Type="RLL"/>', '<Routine Name="Blank"/>'
+            )
+        )
+        with pytest.raises(L5XError, match="unknown type, not RLL"):
+            add_rungs(
+                editable,
+                "MainProgram",
+                "Blank",
+                rungs=[{"text": "NOP();"}],
+                output_path="c.L5X",
+                path="blank.L5X",
+            )
+
+    def test_st_routine_is_refused_by_rung_tools(self, editable):
+        add_routine(
+            editable, "MainProgram", "Txt", type="ST", output_path="s.L5X", path=EXAMPLE
+        )
+        with pytest.raises(L5XError, match="is ST, not RLL"):
+            add_rungs(
+                editable,
+                "MainProgram",
+                "Txt",
+                rungs=[{"text": "NOP();"}],
+                output_path="t.L5X",
+                path=OUT + "s.L5X",
+            )
+
+
 class TestAddRoutine:
     def test_adds_rll_routine_with_rung_comment_and_description(self, editable):
         result = add_routine(

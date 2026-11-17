@@ -4,7 +4,8 @@ import pytest
 from py_l5x import AliasTag, load
 
 from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, ItemNotFoundError, L5XError
-from l5x_mcp.tools.definitions import get_spec
+from l5x_mcp.tools.definitions import get_spec, rename_program
+from l5x_mcp.tools.edit_logic import add_rungs
 from l5x_mcp.tools.edit_tags import (
     add_tags,
     remove_tags,
@@ -12,6 +13,7 @@ from l5x_mcp.tools.edit_tags import (
     set_tag_values,
     update_tag,
 )
+from l5x_mcp.tools.search import find_references
 
 OUT_DIR = DEFAULT_OUTPUT_DIR
 OUT = OUT_DIR + "/"
@@ -531,3 +533,218 @@ class TestUpdateTag:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
+
+
+class TestTagReferences:
+    """Remaining-reference reports of remove_tags and rename_tag."""
+
+    def _build(self, editable):
+        """Program tag PX in MainProgram, referenced as \\MainProgram.PX."""
+        add_tags(
+            editable,
+            tags=[{"name": "PX", "data_type": "DINT"}],
+            scope="MainProgram",
+            output_path="s1.L5X",
+            path=EXAMPLE,
+        )
+        add_rungs(
+            editable,
+            program="PeriodicProgram",
+            routine="main",
+            rungs=[{"text": "XIC(\\MainProgram.PX)OTE(test_bool);"}],
+            output_path="s2.L5X",
+            path=OUT + "s1.L5X",
+        )
+        return OUT + "s2.L5X"
+
+    def test_program_tag_referenced_from_another_program(self, editable):
+        src = self._build(editable)
+        renamed = rename_tag(
+            editable,
+            name="PX",
+            new_name="PY",
+            scope="MainProgram",
+            output_path="r.L5X",
+            path=src,
+        )
+        assert any(
+            loc.startswith("PeriodicProgram/main")
+            for loc in renamed["references"]["locations"]
+        )
+        removed = remove_tags(
+            editable,
+            names=["PX"],
+            scope="MainProgram",
+            output_path="d.L5X",
+            path=src,
+        )
+        locs = removed["references"]["PX"]["locations"]
+        assert any(loc.startswith("PeriodicProgram/main") for loc in locs)
+
+    def test_shadowed_controller_tag_skips_the_shadowing_program(self, editable):
+        add_tags(
+            editable,
+            tags=[{"name": "Shared", "data_type": "DINT"}],
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        add_tags(
+            editable,
+            tags=[{"name": "Shared", "data_type": "DINT"}],
+            scope="PeriodicProgram",
+            output_path="b.L5X",
+            path=OUT + "a.L5X",
+        )
+        add_rungs(
+            editable,
+            program="PeriodicProgram",
+            routine="main",
+            rungs=[{"text": "XIC(Shared)OTE(test_bool);"}],
+            output_path="c.L5X",
+            path=OUT + "b.L5X",
+        )
+        add_rungs(
+            editable,
+            program="MainProgram",
+            routine="MainRoutine",
+            rungs=[{"text": "XIC(Shared)OTE(an_int_out);"}],
+            output_path="d.L5X",
+            path=OUT + "c.L5X",
+        )
+        add_tags(
+            editable,
+            tags=[
+                {"name": "AliasHere", "alias_for": "Shared"},
+            ],
+            scope="MainProgram",
+            output_path="e1.L5X",
+            path=OUT + "d.L5X",
+        )
+        add_tags(
+            editable,
+            tags=[{"name": "AliasShadowed", "alias_for": "Shared"}],
+            scope="PeriodicProgram",
+            output_path="e.L5X",
+            path=OUT + "e1.L5X",
+        )
+        result = remove_tags(
+            editable,
+            names=["Shared"],
+            scope="controller",
+            output_path="f.L5X",
+            path=OUT + "e.L5X",
+        )
+
+        refs = result["references"]["Shared"]
+        assert any(
+            loc.startswith("MainProgram/MainRoutine") for loc in refs["locations"]
+        )
+        assert not any(loc.startswith("PeriodicProgram/") for loc in refs["locations"])
+        assert "MainProgram/AliasHere" in refs["aliases"]
+        assert "PeriodicProgram/AliasShadowed" not in refs["aliases"]
+
+    def test_aoi_logic_with_same_named_parameter_is_not_listed(self, editable):
+        found = find_references(editable, "onDelay", path=EXAMPLE)
+        assert any(m["container_type"] == "aoi" for m in found["matches"])
+        add_tags(
+            editable,
+            tags=[{"name": "onDelay", "data_type": "DINT"}],
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        result = rename_tag(
+            editable,
+            name="onDelay",
+            new_name="onDelay2",
+            output_path="b.L5X",
+            path=OUT + "a.L5X",
+        )
+        refs = result.get("references") or {}
+        aoi_names = {n.lower() for n in _read(editable, EXAMPLE).aois}
+        assert aoi_names
+        for loc in refs.get("locations", []):
+            assert loc.split("/")[0].lower() not in aoi_names
+
+    def test_alias_to_removed_controller_tag_is_listed(self, editable):
+        add_tags(
+            editable,
+            tags=[{"name": "AliasCt", "alias_for": "consumed_tag"}],
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        result = remove_tags(
+            editable,
+            names=["consumed_tag"],
+            output_path="b.L5X",
+            path=OUT + "a.L5X",
+        )
+        assert "controller/AliasCt" in result["references"]["consumed_tag"]["aliases"]
+
+    def test_alias_with_program_prefix_is_listed_on_program_tag_removal(self, editable):
+        add_tags(
+            editable,
+            tags=[{"name": "PX", "data_type": "DINT"}],
+            scope="MainProgram",
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        add_tags(
+            editable,
+            tags=[{"name": "AliasPx", "alias_for": "\\MainProgram.PX"}],
+            scope="PeriodicProgram",
+            output_path="b.L5X",
+            path=OUT + "a.L5X",
+        )
+        result = remove_tags(
+            editable,
+            names=["PX"],
+            scope="MainProgram",
+            output_path="c.L5X",
+            path=OUT + "b.L5X",
+        )
+        assert result["references"]["PX"]["aliases"] == ["PeriodicProgram/AliasPx"]
+
+    def test_rename_program_lists_aliases_using_the_old_name(self, editable):
+        add_tags(
+            editable,
+            tags=[{"name": "PX", "data_type": "DINT"}],
+            scope="MainProgram",
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        add_tags(
+            editable,
+            tags=[{"name": "AliasPx", "alias_for": "\\MainProgram.PX"}],
+            output_path="b.L5X",
+            path=OUT + "a.L5X",
+        )
+        result = rename_program(
+            editable,
+            name="MainProgram",
+            new_name="NewMain",
+            output_path="c.L5X",
+            path=OUT + "b.L5X",
+        )
+        assert result["references"]["aliases"] == ["controller/AliasPx"]
+
+
+class TestAliasWarnings:
+    def test_member_of_tag_without_value_tree_warns(self, editable):
+        result = add_tags(
+            editable,
+            tags=[{"name": "AliasMsg", "alias_for": "message_tag.DN"}],
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        assert len(result["warnings"]) == 1
+        assert "MESSAGE tag 'message_tag'" in result["warnings"][0]
+        assert "'message_tag.DN'" in result["warnings"][0]
+
+    def test_verified_member_has_no_warnings_key(self, editable):
+        result = add_tags(
+            editable,
+            tags=[{"name": "AliasBit", "alias_for": "consumed_tag.3"}],
+            output_path="a.L5X",
+            path=EXAMPLE,
+        )
+        assert "warnings" not in result

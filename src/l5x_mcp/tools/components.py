@@ -8,10 +8,17 @@ project. A ``context_path`` project, when given, is read (never modified) to
 resolve the UDTs and AOIs the new component uses; they are copied into the
 file so it imports on its own. Without one only atomic and built-in types
 (TIMER, COUNTER, STRING, ...) can be used.
+
+Without a context project the file gets a v37 header (``_BLANK_PROJECT``).
+Studio ignores that header: generated components import into blank v33, v35,
+v37 and v38 projects with no warnings (py_l5x experiment exp26, docs/
+import-format.md, "Older Logix versions"). Logic must still use instructions
+valid for the target version.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 
 from py_l5x import ProgramSpec, loads
@@ -28,9 +35,14 @@ from l5x_mcp.specs import (
     TagSpecDict,
     to_py_spec,
 )
-from l5x_mcp.tools.edit_tags import check_spec_aliases, scope_collection
+from l5x_mcp.tools.edit_tags import (
+    check_spec_aliases,
+    scope_collection,
+    with_warnings,
+)
 
-#: An empty v37 project used when a component is created without context.
+#: An empty v37 project used when a component is created without context. The
+#: v37 header is ignored by Studio (imports into v33+ verified, py_l5x exp26).
 _BLANK_PROJECT = """\
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <RSLogix5000Content SchemaRevision="1.0" SoftwareRevision="37.00" \
@@ -66,20 +78,39 @@ def _context(registry: ProjectRegistry, context_path: str | None) -> Project:
     return loads(_BLANK_PROJECT)
 
 
-def _write(
+def _output(
     registry: ProjectRegistry,
-    component: Project,
     output_path: str,
-    overwrite: bool,
     source: str | None,
-    summary: dict[str, Any],
-) -> dict[str, Any]:
-    out = resolve_output(
+    overwrite: bool,
+) -> Path:
+    """Validate ``output_path`` before any work is done.
+
+    Args:
+        registry: The registry.
+        output_path: The tool's ``output_path``.
+        source: The project read (``path`` or ``context_path``), if any; the
+            output may not be this file.
+        overwrite: The tool's ``overwrite``.
+
+    Returns:
+        The resolved destination path.
+    """
+    return resolve_output(
         registry,
         output_path,
         source=registry.resolve(source) if source else None,
         overwrite=overwrite,
     )
+
+
+def _write(
+    registry: ProjectRegistry,
+    component: Project,
+    out: Path,
+    source: str | None,
+    summary: dict[str, Any],
+) -> dict[str, Any]:
     write_project(registry, component, out)
     result: dict[str, Any] = {"file": registry.relpath(out)}
     if source:
@@ -118,10 +149,14 @@ def _context_summary(component: Project) -> dict[str, list[str]]:
 
 def _check_aliases(
     project: Project, specs: list[Any], context_path: str | None
-) -> None:
-    """Check alias targets of new tags against the same list and the context."""
+) -> list[str]:
+    """Check alias targets of new tags against the same list and the context.
+
+    Returns:
+        Warnings for targets whose members could not be verified.
+    """
     try:
-        check_spec_aliases(project, specs)
+        return check_spec_aliases(project, specs)
     except L5XError as exc:
         if context_path:
             raise
@@ -186,6 +221,9 @@ def export_component(
         Dict with file, source, target_type, targets and context (the
         dependencies included).
     """
+    out = resolve_output(
+        registry, output_path, source=registry.resolve(path), overwrite=overwrite
+    )
     source, project = load_fresh(registry, path)
     targets: list[Any]
     if kind == "rungs":
@@ -224,8 +262,7 @@ def export_component(
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         str(source),
         {"targets": labels},
     )
@@ -250,6 +287,9 @@ def create_data_type_file(
     COUNTER, STRING, ...) or UDTs/AOIs in context_path, whose definitions are
     then included in the file.
 
+    Without context_path the file has a v37 header, which Studio ignores
+    (imports into v33+ verified); use instructions valid for the target version.
+
     Args:
         registry: ProjectRegistry to load from.
         spec: The UDT spec.
@@ -261,6 +301,7 @@ def create_data_type_file(
     Returns:
         Dict with file, target_type, targets and context.
     """
+    out = _output(registry, output_path, context_path, overwrite)
     py_spec = to_py_spec("data_type", spec)
     project = _context(registry, context_path)
     _check_free(project.data_types, py_spec.name, "Data type")
@@ -269,8 +310,7 @@ def create_data_type_file(
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         context_path,
         {"targets": [py_spec.name]},
     )
@@ -291,6 +331,9 @@ def create_aoi_file(
     calls in the logic are included in the file. Use instructions valid for the
     target version (v36+ uses MOVE, EQ, ... instead of MOV, EQU, ...).
 
+    Without context_path the file has a v37 header, which Studio ignores
+    (imports into v33+ verified); use instructions valid for the target version.
+
     Args:
         registry: ProjectRegistry to load from.
         spec: The AOI spec.
@@ -302,6 +345,7 @@ def create_aoi_file(
     Returns:
         Dict with file, target_type, targets and context.
     """
+    out = _output(registry, output_path, context_path, overwrite)
     py_spec = to_py_spec("aoi", spec)
     project = _context(registry, context_path)
     _check_free(project.aois, py_spec.name, "AOI")
@@ -310,8 +354,7 @@ def create_aoi_file(
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         context_path,
         {"targets": [py_spec.name]},
     )
@@ -332,6 +375,9 @@ def create_program_file(
     by Studio). The imported program is unscheduled until added to a task.
     Use instructions valid for the target version (v36+ uses MOVE, EQ, ...).
 
+    Without context_path the file has a v37 header, which Studio ignores
+    (imports into v33+ verified); use instructions valid for the target version.
+
     Args:
         registry: ProjectRegistry to load from.
         spec: The program spec.
@@ -341,21 +387,22 @@ def create_program_file(
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
-        Dict with file, target_type, targets and context.
+        Dict with file, target_type, targets and context, plus warnings (alias
+        targets that could not be fully checked), when any.
     """
+    out = _output(registry, output_path, context_path, overwrite)
     py_spec = to_py_spec("program", spec)
     project = _context(registry, context_path)
     _check_free(project.programs, py_spec.name, "Program")
-    _check_aliases(project, py_spec.tags, context_path)
+    warnings = _check_aliases(project, py_spec.tags, context_path)
     with edit_errors(f"program {py_spec.name!r}"):
         component = project.export(py_spec)
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         context_path,
-        {"targets": [py_spec.name]},
+        with_warnings({"targets": [py_spec.name]}, warnings),
     )
 
 
@@ -372,6 +419,9 @@ def create_tags_file(
     initial value. UDTs/AOIs used by the tags are taken from context_path and
     included in the file.
 
+    Without context_path the file has a v37 header, which Studio ignores
+    (imports into v33+ verified); use instructions valid for the target version.
+
     Args:
         registry: ProjectRegistry to load from.
         tags: Tag specs.
@@ -381,24 +431,25 @@ def create_tags_file(
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
-        Dict with file, target_type, targets and context.
+        Dict with file, target_type, targets and context, plus warnings (alias
+        targets that could not be fully checked), when any.
     """
+    out = _output(registry, output_path, context_path, overwrite)
     if not tags:
         raise L5XError("tags must contain at least one tag spec")
     specs = [to_py_spec("tag", t) for t in tags]
     project = _context(registry, context_path)
     for spec in specs:
         _check_free(project.controller_tags, spec.name, "Controller tag")
-    _check_aliases(project, specs, context_path)
+    warnings = _check_aliases(project, specs, context_path)
     with edit_errors("tags"):
         component = project.export(specs)
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         context_path,
-        {"targets": [s.name for s in specs]},
+        with_warnings({"targets": [s.name for s in specs]}, warnings),
     )
 
 
@@ -426,6 +477,9 @@ def create_routine_file(
     takes lines. Tags of context_path used by the logic (program tags of
     program first, then controller tags) and their types are included.
 
+    Without context_path the file has a v37 header, which Studio ignores
+    (imports into v33+ verified); use instructions valid for the target version.
+
     Args:
         registry: ProjectRegistry to load from.
         program: Program the routine belongs to.
@@ -438,6 +492,7 @@ def create_routine_file(
     Returns:
         Dict with file, target_type, targets and context.
     """
+    out = _output(registry, output_path, context_path, overwrite)
     spec = to_py_spec("routine", routine)
     if spec.type_ == "RLL" and spec.lines:
         raise L5XError("lines are for ST routines; use rungs for RLL")
@@ -456,8 +511,7 @@ def create_routine_file(
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         context_path,
         {"targets": [f"{prog.name}/{spec.name}"]},
     )
@@ -479,6 +533,9 @@ def create_rungs_file(
     rungs (program tags of program first, then controller tags) and their
     types are included, so missing tags are created on import.
 
+    Without context_path the file has a v37 header, which Studio ignores
+    (imports into v33+ verified); use instructions valid for the target version.
+
     Args:
         registry: ProjectRegistry to load from.
         program: Program of the target routine.
@@ -492,6 +549,7 @@ def create_rungs_file(
     Returns:
         Dict with file, target_type, targets (rung count) and context.
     """
+    out = _output(registry, output_path, context_path, overwrite)
     if not rungs:
         raise L5XError("rungs must contain at least one rung")
     project = _context(registry, context_path)
@@ -507,8 +565,7 @@ def create_rungs_file(
     return _write(
         registry,
         component,
-        output_path,
-        overwrite,
+        out,
         context_path,
         {"targets": [f"{prog.name}/{rtn.name}: {len(rungs)} rungs"]},
     )

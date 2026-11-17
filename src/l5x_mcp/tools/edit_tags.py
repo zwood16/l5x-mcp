@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from py_l5x import AliasTag, ModuleTagRef, Tag, build_tag
@@ -38,32 +38,179 @@ def scope_collection(project: Project, scope: str) -> tuple[str, TagsCollection]
     return program.name, program.tags
 
 
-def references(
-    registry: ProjectRegistry, out_path: str, name: str, program: str | None = None
-) -> dict[str, Any] | None:
-    """Summarize logic that still refers to ``name`` in the written file.
+def _logic_locations(
+    registry: ProjectRegistry,
+    out_path: str,
+    query: str,
+    program: str | None = None,
+    skip_programs: frozenset[str] = frozenset(),
+) -> list[str]:
+    """List the program logic locations that mention ``query``.
+
+    AOI logic is never searched: it only sees its own parameters and locals.
 
     Args:
         registry: The registry (used to read the output file).
         out_path: Root-relative path of the written file.
-        name: The tag, routine or type name to look for.
+        query: Tag, routine or program text to look for.
         program: Limit the search to one program.
+        skip_programs: Lower-case program names whose matches are dropped.
 
     Returns:
-        ``{"total": n, "locations": [...]}``, or ``None`` when there are none.
+        Locations such as ``Program/Routine rung 3``.
     """
-    found = find_references(registry, name, kind="tag", program=program, path=out_path)
-    if not found["total_matches"]:
-        return None
+    found = find_references(
+        registry,
+        query,
+        kind="tag",
+        program=program,
+        include_aois=False,
+        limit=2000,
+        path=out_path,
+    )
     locations = []
-    for match in found["matches"][:MAX_REFERENCE_LOCATIONS]:
+    for match in found["matches"]:
+        if match["container"].lower() in skip_programs:
+            continue
         where = f"{match['container']}/{match['routine']}"
         if "rung" in match:
             where += f" rung {match['rung']}"
         elif "line" in match:
             where += f" line {match['line']}"
         locations.append(where)
-    return {"total": found["total_matches"], "locations": locations}
+    return locations
+
+
+def _alias_hits(project: Project, hit: Callable[[str, Any], bool]) -> list[str]:
+    """List alias tags whose target satisfies ``hit``.
+
+    Args:
+        project: The project to scan.
+        hit: Called with the alias's scope (``"controller"`` or program name)
+            and its parsed target operand.
+
+    Returns:
+        ``"<scope>/<alias name>"`` entries.
+    """
+    scopes = [("controller", project.controller_tags)]
+    scopes += [(p.name, p.tags) for p in project.programs.values()]
+    found = []
+    for scope, collection in scopes:
+        for tag in collection.values():
+            if not isinstance(tag, AliasTag) or not tag.alias_for:
+                continue
+            try:
+                parsed = parse_operand(tag.alias_for)
+            except L5XError:
+                continue
+            if hit(scope, parsed):
+                found.append(f"{scope}/{tag.name}")
+    return found
+
+
+def _references_result(
+    locations: list[str], aliases: list[str]
+) -> dict[str, Any] | None:
+    """Build the compact ``references`` dict, or ``None`` when empty."""
+    locations = list(dict.fromkeys(locations))
+    if not locations and not aliases:
+        return None
+    out: dict[str, Any] = {"total": len(locations)}
+    if locations:
+        out["locations"] = locations[:MAX_REFERENCE_LOCATIONS]
+    if aliases:
+        out["aliases"] = aliases[:MAX_REFERENCE_LOCATIONS]
+        if len(aliases) > MAX_REFERENCE_LOCATIONS:
+            out["aliases_total"] = len(aliases)
+    return out
+
+
+def references(
+    registry: ProjectRegistry,
+    out_path: str,
+    name: str,
+    program: str | None = None,
+    alias_program: str | None = None,
+) -> dict[str, Any] | None:
+    """Summarize logic that still refers to a routine or program name.
+
+    AOI logic is not searched. For tags use :func:`tag_references`.
+
+    Args:
+        registry: The registry (used to read the output file).
+        out_path: Root-relative path of the written file.
+        name: The routine name, or ``\\Program`` text, to look for.
+        program: Limit the search to one program.
+        alias_program: Also list alias tags whose target has the prefix
+            ``\\alias_program`` (for a renamed program).
+
+    Returns:
+        ``{"total": n, "locations": [...], "aliases": [...]}`` (empty parts
+        omitted), or ``None`` when there is nothing.
+    """
+    locations = _logic_locations(registry, out_path, name, program)
+    aliases = []
+    if alias_program:
+        project = registry.get_with_path(out_path)[1]
+        low = alias_program.lower()
+        aliases = _alias_hits(
+            project, lambda _s, p: p.program is not None and p.program.lower() == low
+        )
+    return _references_result(locations, aliases)
+
+
+def tag_references(
+    registry: ProjectRegistry, out_path: str, name: str, scope: str
+) -> dict[str, Any] | None:
+    """Summarize logic and alias tags that still refer to a removed/renamed tag.
+
+    A controller tag is looked for in every program except those that define
+    their own tag of that name (there the name means the program tag). A
+    program tag is looked for in its own program as ``name`` and in all
+    programs as ``\\Program.name``. AOI logic is not searched.
+
+    Args:
+        registry: The registry (used to read the output file).
+        out_path: Root-relative path of the written file.
+        name: The tag's old name.
+        scope: ``"controller"`` or the program name.
+
+    Returns:
+        ``{"total": n, "locations": [...], "aliases": [...]}`` (empty parts
+        omitted), or ``None`` when there is nothing.
+    """
+    project = registry.get_with_path(out_path)[1]
+    low = name.lower()
+    if scope == "controller":
+        shadowing = frozenset(
+            prog.name.lower()
+            for prog in project.programs.values()
+            if any(k.lower() == low for k in prog.tags)
+        )
+        locations = _logic_locations(registry, out_path, name, skip_programs=shadowing)
+        aliases = _alias_hits(
+            project,
+            lambda s, p: (
+                p.program is None
+                and p.base.lower() == low
+                and (s == "controller" or s.lower() not in shadowing)
+            ),
+        )
+    else:
+        prog_low = scope.lower()
+        locations = _logic_locations(registry, out_path, name, program=scope)
+        locations += _logic_locations(registry, out_path, f"\\{scope}.{name}")
+        aliases = _alias_hits(
+            project,
+            lambda s, p: (
+                p.base.lower() == low
+                and (
+                    (p.program is None and s.lower() == prog_low)
+                    or (p.program is not None and p.program.lower() == prog_low)
+                )
+            ),
+        )
+    return _references_result(locations, aliases)
 
 
 def _find_tag(project: Project, name: str, scope: str | None) -> tuple[str, Any]:
@@ -126,7 +273,8 @@ def add_tags(
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
-        Dict with file (written), source, scope and added (tag names).
+        Dict with file (written), source, scope and added (tag names), plus
+        warnings (alias targets that could not be fully checked), when any.
     """
     if not tags:
         raise L5XError("tags must contain at least one tag spec")
@@ -141,16 +289,35 @@ def add_tags(
                 )
             check_data_type(edit.project, spec.data_type)
     # Before adding, so error messages do not list the batch's own names.
-    check_spec_aliases(edit.project, specs, scope_name)
+    warnings = check_spec_aliases(edit.project, specs, scope_name)
     for spec in specs:
         with edit_errors(f"tag {spec.name!r}"):
             _add_tag_spec(collection, spec)
-    return edit.save({"scope": scope_name, "added": [spec.name for spec in specs]})
+    return edit.save(
+        with_warnings(
+            {"scope": scope_name, "added": [spec.name for spec in specs]}, warnings
+        )
+    )
+
+
+def with_warnings(summary: dict[str, Any], warnings: list[str]) -> dict[str, Any]:
+    """Add a ``warnings`` key to a tool summary when there are warnings.
+
+    Args:
+        summary: The tool-specific result fields.
+        warnings: Warning strings (possibly empty).
+
+    Returns:
+        ``summary``, with ``warnings`` added when non-empty.
+    """
+    if warnings:
+        summary["warnings"] = warnings
+    return summary
 
 
 def check_spec_aliases(
     project: Project, tags: list[Any], scope: str = "controller"
-) -> None:
+) -> list[str]:
     """Check the alias targets of tag specs that are not in the project yet.
 
     A target is accepted if its base is a base tag of the same spec list, a
@@ -162,13 +329,20 @@ def check_spec_aliases(
         tags: py_l5x ``TagSpec`` objects.
         scope: Scope for resolution, normally ``"controller"``.
 
+    Returns:
+        Warnings for targets whose members could not be verified.
+
     Raises:
         L5XError: If an alias target cannot be found.
     """
     batch = {t.name.lower(): t for t in tags}
+    warnings: list[str] = []
     for tag in tags:
         if tag.alias_for:
-            check_alias_target(project, tag.alias_for, scope, tag.name, batch)
+            warnings += check_alias_target(
+                project, tag.alias_for, scope, tag.name, batch
+            )
+    return warnings
 
 
 def _add_tag_spec(collection: TagsCollection, spec: Any) -> Any:
@@ -194,7 +368,7 @@ def check_alias_target(
     scope: str,
     alias_name: str | None = None,
     batch: Mapping[str, Any] | None = None,
-) -> None:
+) -> list[str]:
     """Check that an alias target exists, including members, bits and indexes.
 
     Args:
@@ -209,6 +383,11 @@ def check_alias_target(
             may have no data yet). A base that is another alias of the batch
             is followed through the batch specs.
 
+    Returns:
+        Warnings (empty when the whole path was verified). A target through a
+        tag with no value tree (MESSAGE, AXIS_*, ...) is accepted with a
+        warning, because its members cannot be checked here.
+
     Raises:
         L5XError: If the target cannot be found, or aliases form a cycle.
     """
@@ -222,7 +401,7 @@ def check_alias_target(
         if spec is None:
             break
         if not spec.alias_for:
-            return
+            return []
         if spec.name.lower() in (c.lower() for c in chain):
             cycle = " -> ".join([*chain, spec.name])
             raise L5XError(f"{label}alias cycle {cycle}")
@@ -239,6 +418,15 @@ def check_alias_target(
         raise L5XError(f"{label}target {target!r} not found: {exc}") from exc
     if resolved.alias_error:
         raise L5XError(f"{label}target {target!r} not found: {resolved.alias_error}")
+    hop = resolved
+    while hop is not None:
+        if hop.segments_remaining:
+            return [
+                f"{label}members of {hop.tag.data_type} tag {hop.tag.name!r} are "
+                f"not checked; Studio verifies {target!r} when the project is built"
+            ]
+        hop = hop.target
+    return []
 
 
 def _apply_operand_metadata(
@@ -273,8 +461,9 @@ def remove_tags(
     """Delete tags and write the result to a new file.
 
     Logic, alias tags and other references to removed tags are NOT updated;
-    the result lists remaining logic references so you can fix them (a project
-    with dangling references fails to verify in Studio).
+    the result lists remaining logic references and alias tags that point at
+    them so you can fix them (a project with dangling references fails to
+    verify in Studio).
 
     Args:
         registry: ProjectRegistry to load from.
@@ -303,8 +492,7 @@ def remove_tags(
     result = edit.save({"removed": removed})
     refs = {}
     for item in removed:
-        program = None if item["scope"] == "controller" else item["scope"]
-        found = references(registry, result["file"], item["name"], program)
+        found = tag_references(registry, result["file"], item["name"], item["scope"])
         if found:
             refs[item["name"]] = found
     if refs:
@@ -324,7 +512,8 @@ def rename_tag(
     """Rename a tag and write the result to a new file.
 
     Logic and alias references to the old name are NOT updated; the result
-    lists them (references) so they can be edited with the rung tools.
+    lists them (references: logic locations and alias tags) so they can be
+    edited with the rung and tag tools.
 
     Args:
         registry: ProjectRegistry to load from.
@@ -349,8 +538,7 @@ def rename_tag(
         collection.rename(old, new_name)
     result = edit.save({"scope": tag_scope, "renamed": {"from": old, "to": new_name}})
     if old.lower() != new_name.lower():  # Logix names are case-insensitive
-        program = None if tag_scope == "controller" else tag_scope
-        found = references(registry, result["file"], old, program)
+        found = tag_references(registry, result["file"], old, tag_scope)
         if found:
             result["references"] = found
     return result

@@ -19,7 +19,12 @@ from l5x_mcp.specs import (
     from_py_spec,
     to_py_spec,
 )
-from l5x_mcp.tools.edit_tags import _find_tag, check_spec_aliases, references
+from l5x_mcp.tools.edit_tags import (
+    _find_tag,
+    check_spec_aliases,
+    references,
+    with_warnings,
+)
 from l5x_mcp.tools.programs import json_size, validate_max_chars
 
 SpecKind = Literal["data_type", "aoi", "program", "tag", "routine"]
@@ -416,22 +421,26 @@ def add_program(
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
-        Dict with file, source, program, task, tags and routines (counts).
+        Dict with file, source, program, task, tags and routines (counts),
+        plus warnings (alias targets that could not be fully checked), when any.
     """
     py_spec = to_py_spec("program", spec)
     edit = Edit.open(registry, path, output_path, overwrite)
-    check_spec_aliases(edit.project, py_spec.tags)
+    warnings = check_spec_aliases(edit.project, py_spec.tags)
     if task is not None:
         task = lookup(edit.project.tasks, task, "Task").name
     with edit_errors(f"program {py_spec.name!r}"):
         edit.project.programs.add(py_spec, task=task)
     return edit.save(
-        {
-            "program": py_spec.name,
-            "task": task,
-            "tags": len(py_spec.tags),
-            "routines": len(py_spec.routines),
-        }
+        with_warnings(
+            {
+                "program": py_spec.name,
+                "task": task,
+                "tags": len(py_spec.tags),
+                "routines": len(py_spec.routines),
+            },
+            warnings,
+        )
     )
 
 
@@ -458,20 +467,24 @@ def replace_program(
         overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
-        Dict with file, source, program, tags and routines (counts).
+        Dict with file, source, program, tags and routines (counts), plus
+        warnings (alias targets that could not be fully checked), when any.
     """
     py_spec = to_py_spec("program", spec)
     edit = Edit.open(registry, path, output_path, overwrite)
     py_spec.name = lookup(edit.project.programs, py_spec.name, "Program").name
-    check_spec_aliases(edit.project, py_spec.tags)
+    warnings = check_spec_aliases(edit.project, py_spec.tags)
     with edit_errors(f"program {py_spec.name!r}"):
         edit.project.programs.replace(py_spec)
     return edit.save(
-        {
-            "program": py_spec.name,
-            "tags": len(py_spec.tags),
-            "routines": len(py_spec.routines),
-        }
+        with_warnings(
+            {
+                "program": py_spec.name,
+                "tags": len(py_spec.tags),
+                "routines": len(py_spec.routines),
+            },
+            warnings,
+        )
     )
 
 
@@ -486,7 +499,8 @@ def rename_program(
     """Rename a program (task schedules follow); write to a new file.
 
     "\\OldName.tag" references in other programs' logic are NOT updated; the
-    result lists them (references).
+    result lists them (references), together with alias tags whose target
+    still uses "\\OldName.".
 
     Args:
         registry: ProjectRegistry to load from.
@@ -506,7 +520,7 @@ def rename_program(
         edit.project.programs.rename(old, new_name)
     result = edit.save({"renamed": {"from": old, "to": new_name}})
     if old.lower() != new_name.lower():
-        found = references(registry, result["file"], f"\\{old}")
+        found = references(registry, result["file"], f"\\{old}", alias_program=old)
         if found:
             result["references"] = found
     return result

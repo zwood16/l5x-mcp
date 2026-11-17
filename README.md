@@ -292,9 +292,17 @@ Rules shared by every write tool:
 - To chain edits, pass the previous call's output (the `file` in its result) as the
   next call's `path`.
 - Edits are all-or-nothing: if any part fails, no file is written.
-- Renames and removals of tags, routines and programs don't rewrite logic. The result
-  lists the remaining `references` so they can be fixed. `rename_aoi` does rewrite call
-  sites, and `rename_data_type` updates every tag, member and parameter of that type.
+- Renames and removals of tags, routines and programs don't rewrite logic or alias tags.
+  The result lists the remaining `references` (logic locations, including
+  `\Program.Tag` uses in other programs, and alias tags that still point at the old
+  name) so they can be fixed. Programs whose own tag shadows a controller tag of the same
+  name, and AOI logic, are left out. `rename_aoi` does rewrite call sites, and
+  `rename_data_type` updates every tag, member and parameter of that type.
+- Alias targets must exist (in the scope, the controller tags, module I/O, or another
+  tag added in the same call). Members of tags without a value tree (MESSAGE, AXIS_*,
+  …) can't be checked; those aliases are accepted with a `warnings` entry in the result.
+- Component files built without `context_path` carry a v37 header. Studio ignores it:
+  py_l5x verified imports into v33, v35, v37 and v38.
 - Logic is only checked for balanced brackets and a trailing `;`. Undefined tags and
   wrong instructions show up when Studio verifies the project. Use instructions that
   exist in your version (v36+ uses `MOVE`, `EQ`, … instead of `MOV`, `EQU`, …).

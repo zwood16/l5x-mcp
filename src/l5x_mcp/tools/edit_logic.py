@@ -31,9 +31,10 @@ def _routine(project: Project, program: str, routine: str) -> tuple[str, Routine
 
 def _require_type(routine: Routine, kind: str) -> None:
     actual = _routine_type(routine)
-    if actual and actual != kind:
+    if actual != kind:
+        what = f"is {actual}" if actual else "is of unknown type"
         raise L5XError(
-            f"routine {routine.name!r} is {actual or 'empty'}, not {kind}; "
+            f"routine {routine.name!r} {what}, not {kind}; "
             f"this tool only edits {kind} routines"
         )
 

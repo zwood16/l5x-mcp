@@ -186,11 +186,43 @@ class TestCreateComponents:
             )
         assert not (editable.root / OUT_DIR / "out.L5X").exists()
 
+    def test_create_data_type_without_members_is_refused(self, editable):
+        with pytest.raises(L5XError, match="at least one member"):
+            create_data_type_file(
+                editable, spec={"name": "Empty", "members": []}, output_path="e.L5X"
+            )
+        assert not (editable.root / OUT_DIR / "e.L5X").exists()
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda r, o: create_data_type_file(
+                r, spec={"name": "", "members": 5}, output_path=o
+            ),
+            lambda r, o: create_aoi_file(r, spec={"bogus": 1}, output_path=o),
+            lambda r, o: create_program_file(r, spec={"bogus": 1}, output_path=o),
+            lambda r, o: create_tags_file(r, tags=[], output_path=o),
+            lambda r, o: create_routine_file(
+                r, program="P", routine={"bogus": 1}, output_path=o
+            ),
+            lambda r, o: create_rungs_file(
+                r, program="P", routine="R", rungs=[], output_path=o
+            ),
+            lambda r, o: export_component(r, kind="nope", output_path=o, path=EXAMPLE),
+        ],
+    )
+    def test_output_path_is_checked_before_the_spec(self, editable, call):
+        with pytest.raises(L5XError, match="output_path must end in .L5X"):
+            call(editable, "x.txt")
+
     def test_existing_name_in_context_is_refused(self, editable):
         with pytest.raises(L5XError, match="already exists"):
             create_data_type_file(
                 editable,
-                spec={"name": "simple_udt", "members": []},
+                spec={
+                    "name": "simple_udt",
+                    "members": [{"name": "x", "data_type": "DINT"}],
+                },
                 context_path=EXAMPLE,
                 output_path="out.L5X",
             )
