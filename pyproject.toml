@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "mcp[cli]>=2.3.0",
-    "py-l5x>=0.3.1",
+    "py-l5x>=0.4.0",
 ]
 
 [project.scripts]
@@ -20,7 +20,7 @@ requires = ["uv_build>=0.12.14,<0.13.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-py-l5x = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.3.1/py_l5x-0.3.1-py3-none-any.whl" }
+py-l5x = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.4.0/py_l5x-0.4.0-py3-none-any.whl" }
 
 [tool.ruff]
 line-length = 88

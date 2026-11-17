@@ -1,4 +1,9 @@
-"""MCP server exposing py_l5x project data as read-only tools."""
+"""MCP server exposing py_l5x project data to LLM agents as tools.
+
+Read tools are always registered. Write tools (which save edited copies of a
+project or create import files) are registered unless the server runs with
+``read_only=True``.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +20,11 @@ from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from l5x_mcp.registry import L5XError, ProjectRegistry
 from l5x_mcp.tools import (
     aois,
+    components,
     datatypes,
+    definitions,
+    edit_logic,
+    edit_tags,
     modules,
     programs,
     project,
@@ -26,11 +35,21 @@ from l5x_mcp.tools import (
 
 SERVER_NAME = "l5x-mcp"
 
-INSTRUCTIONS = """\
+_READ_ONLY_OPENING = """\
 Read-only access to Rockwell Automation Studio 5000 Logix Designer projects exported as
 .L5X (XML) files. Prefer these tools over reading the raw .L5X XML: the files are large
 and the tools return compact, structured summaries.
 
+"""
+
+_EDIT_OPENING = """\
+Access to Rockwell Automation Studio 5000 Logix Designer projects exported as .L5X
+(XML) files. Prefer the read tools over reading the raw .L5X XML: the files are large
+and the tools return compact, structured summaries.
+
+"""
+
+_SHARED_BODY = """\
 Vocabulary: a controller runs Tasks (continuous/periodic/event) which schedule Programs.
 Programs contain program-scoped Tags and Routines (RLL = ladder rungs, ST = structured
 text). Controller-scoped tags are global. UDTs are user-defined data types; AOIs are
@@ -48,6 +67,27 @@ read rung comments, and follow next_start_rung when truncated. The operands map 
 what each operand means; use get_tag, get_data_type and get_aoi for deeper detail.
 Use find_references and instruction_usage for cross-references.
 """
+
+_EDIT_SECTION = """
+Editing (write tools are enabled):
+- Each write tool loads the project at path, applies one change and writes a NEW .L5X
+  to output_path. The source file is never modified. output_path is required, must be
+  a new .L5X inside the server root, and overwrite=true is needed to replace an
+  existing output. To chain several edits, pass the previous output as the next path.
+- Replacing a UDT, AOI or program: get_spec returns the object as a spec in the form
+  the add/replace tools accept; change that spec, then call the replace_* tool.
+- create_*_file and export_component write Studio Import Component files; no project
+  is modified. Import them in Studio 5000.
+- Logic is not verified by these tools. Open the output in Studio 5000 to verify it.
+  Use instructions valid for the project's version (v36+ uses MOVE, EQ, ... instead
+  of MOV, EQU, ...). Logix ST has no TRUE/FALSE literals; use 1 and 0.
+"""
+
+INSTRUCTIONS = _READ_ONLY_OPENING + _SHARED_BODY
+"""Server prompt when the server is read-only."""
+
+EDIT_INSTRUCTIONS = _EDIT_OPENING + _SHARED_BODY + _EDIT_SECTION
+"""Server prompt when write tools are enabled."""
 
 TOOLS: list[Callable[..., Any]] = [
     project.list_l5x_files,
@@ -68,10 +108,51 @@ TOOLS: list[Callable[..., Any]] = [
     modules.get_module,
     search.find_references,
     search.instruction_usage,
+    definitions.get_spec,
+]
+
+WRITE_TOOLS: list[Callable[..., Any]] = [
+    edit_tags.add_tags,
+    edit_tags.remove_tags,
+    edit_tags.rename_tag,
+    edit_tags.set_tag_values,
+    edit_tags.update_tag,
+    edit_logic.add_routine,
+    edit_logic.remove_routine,
+    edit_logic.rename_routine,
+    edit_logic.add_rungs,
+    edit_logic.replace_rung,
+    edit_logic.remove_rungs,
+    edit_logic.set_st_lines,
+    definitions.add_data_type,
+    definitions.replace_data_type,
+    definitions.rename_data_type,
+    definitions.remove_data_type,
+    definitions.add_aoi,
+    definitions.replace_aoi,
+    definitions.rename_aoi,
+    definitions.remove_aoi,
+    definitions.add_program,
+    definitions.replace_program,
+    definitions.rename_program,
+    definitions.remove_program,
+    definitions.schedule_program,
+    definitions.set_description,
+    components.export_component,
+    components.create_data_type_file,
+    components.create_aoi_file,
+    components.create_program_file,
+    components.create_tags_file,
+    components.create_routine_file,
+    components.create_rungs_file,
 ]
 
 _READ_ONLY = ToolAnnotations(
     readOnlyHint=True, idempotentHint=True, openWorldHint=False
+)
+
+_WRITE = ToolAnnotations(
+    readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False
 )
 
 
@@ -144,20 +225,31 @@ def _strip_registry_doc(doc: str) -> str:
 
 
 def create_server(
-    registry: ProjectRegistry | None = None, structured_output: bool = False
+    registry: ProjectRegistry | None = None,
+    structured_output: bool = False,
+    read_only: bool = False,
 ) -> MCPServer:
-    """Build the MCP server with every L5X tool registered.
+    """Build the MCP server with the L5X tools registered.
 
     By default each tool returns one compact JSON text block. With
     ``structured_output=True`` tools also advertise an output schema and return
     the same data as ``structured_content``.
+
+    Write tools (``WRITE_TOOLS``) are registered unless ``read_only=True``, in
+    which case only the read tools (``TOOLS``) are exposed.
     """
     registry = registry or ProjectRegistry()
-    server = MCPServer(name=SERVER_NAME, instructions=INSTRUCTIONS)
-    for fn in TOOLS:
-        server.add_tool(
-            bind_registry(fn, registry, structured_output=structured_output),
-            annotations=_READ_ONLY,
-            structured_output=structured_output,
-        )
+    if read_only:
+        server = MCPServer(name=SERVER_NAME, instructions=INSTRUCTIONS)
+        groups = [(TOOLS, _READ_ONLY)]
+    else:
+        server = MCPServer(name=SERVER_NAME, instructions=EDIT_INSTRUCTIONS)
+        groups = [(TOOLS, _READ_ONLY), (WRITE_TOOLS, _WRITE)]
+    for tool_list, tool_annotations in groups:
+        for fn in tool_list:
+            server.add_tool(
+                bind_registry(fn, registry, structured_output=structured_output),
+                annotations=tool_annotations,
+                structured_output=structured_output,
+            )
     return server

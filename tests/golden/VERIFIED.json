@@ -1,0 +1,145 @@
+{
+  "about": "Golden L5X files from tests/golden_cases.py, each imported into Logix Designer and checked by tools/sdk/check.py. A golden may change only after a new harness run passes (python tools/sdk/check.py --promote); tests/test_golden.py checks these hashes.",
+  "files": {
+    "chain_final.L5X": {
+      "case": "chain_final",
+      "sha256": "d67601b68693cde62a6da1be068459276edc135c598b15afb5b34760c2dd52e0",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_data_type.L5X": {
+      "case": "comp_data_type",
+      "sha256": "695943d30e24013bb868d9a80694b98fc519a16267075fdd72274927efa2ee99",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_aoi.L5X": {
+      "case": "comp_aoi",
+      "sha256": "8831343f493ac6038c6d0cab83468203b007e51f67817f3b664d086ab750f16a",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_aoi_udt.L5X": {
+      "case": "comp_aoi_udt",
+      "sha256": "1974a5f89e5f66c0c98d9d1b27a4b14ec39dc0022b4798c7bed3b6ad0fa41071",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_program.L5X": {
+      "case": "comp_program",
+      "sha256": "905e7b57116e74d21226d67ae6fd211f732275d5ed42672364b02e7bb083e737",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_tags.L5X": {
+      "case": "comp_tags",
+      "sha256": "c95aaf1760e40fcbbd8582c8ee948a171184bb8a2969598fd1bbf15067794422",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_routine.L5X": {
+      "case": "comp_routine",
+      "sha256": "c1635d38a0ee550ee2cdfeb5bbe0abbecb6749c077e9398c8fa5db4fd52548a6",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "comp_rungs.L5X": {
+      "case": "comp_rungs",
+      "sha256": "f09fe2ec836c118a015fd5178fd0ccb4be54fc9ddbaa851dfb3608732d9f05a5",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "exp_data_type.L5X": {
+      "case": "exp_data_type",
+      "sha256": "fa14d6ce48c78f4c4cd6c467298f8cf986b9b94cb6cb78ead788c3c51fd90506",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "exp_aoi.L5X": {
+      "case": "exp_aoi",
+      "sha256": "c7ae54ca8571a367789cd4f7ba5972b6ce7d01e04d40fe6bad62cd17c4b253f7",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "exp_program.L5X": {
+      "case": "exp_program",
+      "sha256": "8ae2cdce3e02a98e9e4079a814153fe234d6b3ad364d89cc15b97948861c462c",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "exp_tags.L5X": {
+      "case": "exp_tags",
+      "sha256": "d5a3ed7ee1726fd79ba7bfb1f52c1d1b23d75934aadd33e8e63b6c0105157244",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "exp_routine.L5X": {
+      "case": "exp_routine",
+      "sha256": "81f1c528f533e6147f34a4e667967d683e2d5c93dfd9e0d9e80b4104bd10da46",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    },
+    "exp_rungs.L5X": {
+      "case": "exp_rungs",
+      "sha256": "be3e0b1f30893f16a9fc1e59e3e1651ce2b8f145324ed0255d765c5136836a9c",
+      "logix": {
+        "37": "37.00",
+        "38": "38.03"
+      },
+      "verified": "2026-11-16",
+      "build": "ok"
+    }
+  }
+}

@@ -1,0 +1,1801 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<RSLogix5000Content SchemaRevision="1.0" SoftwareRevision="37.00" TargetName="FanucRobot" TargetType="AddOnInstructionDefinition" TargetRevision="1.4" TargetLastEdited="2025-11-19T02:25:29.668Z" ContainsContext="true">
+<Controller Use="Context" Name="Example_PLC">
+<DataTypes Use="Context">
+<DataType Name="robotAlarmCode" Family="StringFamily" Class="User">
+<Members>
+<Member Name="LEN" DataType="DINT" Dimension="0" Radix="Decimal" Hidden="false" ExternalAccess="Read/Write"/>
+<Member Name="DATA" DataType="SINT" Dimension="8" Radix="ASCII" Hidden="false" ExternalAccess="Read/Write"/>
+</Members>
+</DataType>
+<DataType Name="robotString" Family="StringFamily" Class="User">
+<Members>
+<Member Name="LEN" DataType="DINT" Dimension="0" Radix="Decimal" Hidden="false" ExternalAccess="Read/Write"/>
+<Member Name="DATA" DataType="SINT" Dimension="100" Radix="ASCII" Hidden="false" ExternalAccess="Read/Write"/>
+</Members>
+</DataType>
+<DataType Name="robotUI" Family="NoFamily" Class="User">
+<Description>
+<![CDATA[Fanuc Robot UO (User Output) Signals]]>
+</Description>
+<Members>
+<Member Name="ZZZZZZZZZZrobotUIns0" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="IMSTP" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="hold" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="SFSPD" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="2" ExternalAccess="Read/Write"/>
+<Member Name="cstop" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="3" ExternalAccess="Read/Write"/>
+<Member Name="faultReset" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="4" ExternalAccess="Read/Write"/>
+<Member Name="start" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="5" ExternalAccess="Read/Write"/>
+<Member Name="home" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="6" ExternalAccess="Read/Write"/>
+<Member Name="enable" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns0" BitNumber="7" ExternalAccess="Read/Write"/>
+<Member Name="ZZZZZZZZZZrobotUIns9" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="pns1" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="pns2" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="pns3" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="2" ExternalAccess="Read/Write"/>
+<Member Name="pns4" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="3" ExternalAccess="Read/Write"/>
+<Member Name="pns5" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="4" ExternalAccess="Read/Write"/>
+<Member Name="pns6" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="5" ExternalAccess="Read/Write"/>
+<Member Name="pns7" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="6" ExternalAccess="Read/Write"/>
+<Member Name="pns8" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns9" BitNumber="7" ExternalAccess="Read/Write"/>
+<Member Name="ZZZZZZZZZZrobotUIns18" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="pnsStrobe" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns18" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="prodStart" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIns18" BitNumber="1" ExternalAccess="Read/Write"/>
+</Members>
+</DataType>
+<DataType Name="robotUO" Family="NoFamily" Class="User">
+<Description>
+<![CDATA[Robot UI (User Input) Signals]]>
+</Description>
+<Members>
+<Member Name="ZZZZZZZZZZrobotUIs0" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="cmdEnable" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="systemReady" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="prgRunning" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="2" ExternalAccess="Read/Write"/>
+<Member Name="prgPaused" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="3" ExternalAccess="Read/Write"/>
+<Member Name="motionHeld" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="4" ExternalAccess="Read/Write"/>
+<Member Name="fault" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="5" ExternalAccess="Read/Write"/>
+<Member Name="atPerch" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="6" ExternalAccess="Read/Write"/>
+<Member Name="tpEnabled" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs0" BitNumber="7" ExternalAccess="Read/Write"/>
+<Member Name="ZZZZZZZZZZrobotUIs9" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="battAlarm" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="busy" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="ack1" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="2" ExternalAccess="Read/Write"/>
+<Member Name="ack2" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="3" ExternalAccess="Read/Write"/>
+<Member Name="ack3" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="4" ExternalAccess="Read/Write"/>
+<Member Name="ack4" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="5" ExternalAccess="Read/Write"/>
+<Member Name="ack5" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="6" ExternalAccess="Read/Write"/>
+<Member Name="ack6" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs9" BitNumber="7" ExternalAccess="Read/Write"/>
+<Member Name="ZZZZZZZZZZrobotUIs18" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="ack7" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs18" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="ack8" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs18" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="snack" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZrobotUIs18" BitNumber="2" ExternalAccess="Read/Write"/>
+</Members>
+</DataType>
+</DataTypes>
+<AddOnInstructionDefinitions Use="Context">
+<AddOnInstructionDefinition Name="FanucAlarmLookup" Class="Standard" Revision="1.0" ExecutePrescan="false" ExecutePostscan="false" ExecuteEnableInFalse="false" CreatedDate="2021-10-18T18:28:33.762Z" CreatedBy="A-I-CORP\ZWood" EditedDate="2023-06-27T20:02:36.212Z" EditedBy="A-I-CORP\ZWood" SoftwareRevision="v33.01">
+<RevisionNote>
+<![CDATA[V1.0: Initial release]]>
+</RevisionNote>
+<Parameters>
+<Parameter Name="EnableIn" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Input - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="EnableOut" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Output - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="allowableAlarms" TagType="Base" DataType="robotAlarmCode" Dimensions="20" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="robotLastAlarm" TagType="Base" DataType="robotString" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="recoverableAlarm" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+</Parameters>
+<LocalTags>
+<LocalTag Name="robotAlarmCode" DataType="robotAlarmCode" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,'$00$00$00$00$00$00$00$00']]]>
+</DefaultData>
+<DefaultData Format="String" Length="0">
+<![CDATA['']]>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="length" DataType="DINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="j" DataType="DINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+</LocalTags>
+<Routines>
+<Routine Name="Logic" Type="ST">
+<Description>
+<![CDATA[Returns if the current robot alarm is allowable]]>
+</Description>
+<STContent>
+<Line Number="0">
+<![CDATA[(* ]]>
+</Line>
+<Line Number="1">
+<![CDATA[Robot Alarm Lookup: sets recoverableAlarm to True (1) if the current robot alarm is in the allowable list. For use in FanucRobot AOI.]]>
+</Line>
+<Line Number="2">
+<![CDATA[]]>
+</Line>
+<Line Number="3">
+<![CDATA[To Use: ]]>
+</Line>
+<Line Number="4">
+<![CDATA[- Create a recoverableAlarms array externally and write the codes of any and all alarms where the robot is allowed to paused, for example: SRVO-004]]>
+</Line>
+<Line Number="5">
+<![CDATA[- Input the robot's last alarm string]]>
+</Line>
+<Line Number="6">
+<![CDATA[- Call once check the recoverableAlarm output to see if the current "last alarm" is within the allowableAlarms array/list]]>
+</Line>
+<Line Number="7">
+<![CDATA[*)]]>
+</Line>
+<Line Number="8">
+<![CDATA[]]>
+</Line>
+<Line Number="9">
+<![CDATA[recoverableAlarm := 0;]]>
+</Line>
+<Line Number="10">
+<![CDATA[// Pull the alarm code out of the last alarm string. It should always be the first 8 characters.]]>
+</Line>
+<Line Number="11">
+<![CDATA[MID(robotLastAlarm, 8, 1, robotAlarmCode);]]>
+</Line>
+<Line Number="12">
+<![CDATA[SIZE(allowableAlarms, 0, length);]]>
+</Line>
+<Line Number="13">
+<![CDATA[]]>
+</Line>
+<Line Number="14">
+<![CDATA[// Check if the alarm code matches any alarms in the allowable alarms array]]>
+</Line>
+<Line Number="15">
+<![CDATA[FOR j:=0 TO length - 1 BY 1 DO]]>
+</Line>
+<Line Number="16">
+<![CDATA[	IF robotAlarmCode = allowableAlarms[j] THEN]]>
+</Line>
+<Line Number="17">
+<![CDATA[		recoverableAlarm := 1;]]>
+</Line>
+<Line Number="18">
+<![CDATA[		EXIT;]]>
+</Line>
+<Line Number="19">
+<![CDATA[	END_IF;]]>
+</Line>
+<Line Number="20">
+<![CDATA[END_FOR;]]>
+</Line>
+<Line Number="21">
+<![CDATA[]]>
+</Line>
+</STContent>
+</Routine>
+</Routines>
+<Dependencies>
+<Dependency Type="DataType" Name="robotAlarmCode"/>
+<Dependency Type="DataType" Name="robotString"/>
+</Dependencies>
+</AddOnInstructionDefinition>
+<AddOnInstructionDefinition Name="FanucPNS" Class="Standard" Revision="1.0" ExecutePrescan="false" ExecutePostscan="false" ExecuteEnableInFalse="true" CreatedDate="2016-04-06T17:38:41.989Z" CreatedBy="A-I-CORP\zwood" EditedDate="2023-06-28T17:55:09.879Z" EditedBy="A-I-CORP\ZWood" SoftwareRevision="v33.01">
+<RevisionNote>
+<![CDATA[V1.1 Updated documentation
+V1.0: Modernized version of PNS_Action designed for use with the fanucRobot AOI. Changes from PNS_Action V3 include:  
+- Updated to use UI and UO data types
+- Adjusted tag names to camelCase
+- Change faults to bit addressed instead of a single code]]>
+</RevisionNote>
+<Parameters>
+<Parameter Name="EnableIn" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Input - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="EnableOut" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Output - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="busy" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="fault" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="faulted" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="statusCode" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="done" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="programNumber" TagType="Base" DataType="DINT" Usage="Input" Radix="Decimal" Required="true" Visible="true" ExternalAccess="Read/Write">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="UI" TagType="Base" DataType="robotUI" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="UO" TagType="Base" DataType="robotUO" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+</Parameters>
+<LocalTags>
+<LocalTag Name="Step" DataType="DINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="watchdogTimer" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,3000,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="3000"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="ons" DataType="DINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="ack" DataType="SINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="SINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="pns" DataType="SINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="SINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+</LocalTags>
+<Routines>
+<Routine Name="EnableInFalse" Type="RLL">
+<Description>
+<![CDATA[EnableInFalse]]>
+</Description>
+<RLLContent>
+<Rung Number="0" Type="N">
+<Comment>
+<![CDATA[Reset values when AOI is not running]]>
+</Comment>
+<Text>
+<![CDATA[OTU(ons.0);]]>
+</Text>
+</Rung>
+<Rung Number="1" Type="N">
+<Text>
+<![CDATA[OTU(UI.pnsStrobe);]]>
+</Text>
+</Rung>
+<Rung Number="2" Type="N">
+<Text>
+<![CDATA[RES(watchdogTimer);]]>
+</Text>
+</Rung>
+</RLLContent>
+</Routine>
+<Routine Name="Logic" Type="RLL">
+<RLLContent>
+<Rung Number="0" Type="N">
+<Comment>
+<![CDATA[FanucPNS: Call a robot program using the Program Number Select (PNS) protocol via the UOP (User Operator Panel) signals.
+
+To Use: 
+- Set a program number
+- Input the robot's UO signals
+- Output the robot's UI signals
+- Call to run the PNS sequence and wait for the done or faulted output
+
+The robot should have the following settings (found under system->config settings)
+Enable UI signals : true
+START for CONTINUE only : false
+CSTOPI for ABORT : true
+abort all programs by CSTOPI : true
+PROD_START depend on PNSSTROBE : true
+
+Required Starting Conditions:
+CMD Enable and System Ready UOPs on ON
+UI and UO variables must be mapped to Robot IN/OUT UOP signals externally
+Robot is not already running a program
+
+Fault Codes (bit addressed)
+Bit 0 - CMD_ENABLED UOP is not on (check IMSPOP, HOLD, SFPD, ENABLE and Manual/Auto state of the robot)
+Bit 1 - System_Ready UOP is not on (check the same things as CMD_ENABLED) & Robot Fault
+Bit 2 - PNS Watchdog Timer Triggered. Process could not complete
+Bit 3 - PNS outputs do not match inputs after cycling the PNSStrobe. 
+Bit 4 - Program already running. Cycle Stop before calling PNS Action]]>
+</Comment>
+<Text>
+<![CDATA[NOP();]]>
+</Text>
+</Rung>
+<Rung Number="1" Type="N">
+<Comment>
+<![CDATA[Start PNS Action on when AOI is enabled.
+Reset Status Bits/Codes
+Make Sure UOP Outputs are in correct state]]>
+</Comment>
+<Text>
+<![CDATA[ONS(ons.0)[OTU(done) ,OTL(busy) ,MOVE(0,fault) ,MOVE(10,Step) ];]]>
+</Text>
+</Rung>
+<Rung Number="2" Type="N">
+<Comment>
+<![CDATA[Enable Watchdog Timer. If PNS Action exceeds time limit, flag error]]>
+</Comment>
+<Text>
+<![CDATA[[TON(watchdogTimer,?,?) ,XIC(watchdogTimer.DN) MOVE(0,Step) OTL(fault.2) ];]]>
+</Text>
+</Rung>
+<Rung Number="3" Type="N">
+<Comment>
+<![CDATA[Set the Status Code]]>
+</Comment>
+<Text>
+<![CDATA[MOVE(Step,statusCode);]]>
+</Text>
+</Rung>
+<Rung Number="4" Type="N">
+<Comment>
+<![CDATA[Error State
+
+Unlatch Busy and do nothing]]>
+</Comment>
+<Text>
+<![CDATA[EQ(Step,0)OTU(busy);]]>
+</Text>
+</Rung>
+<Rung Number="5" Type="N">
+<Text>
+<![CDATA[NE(fault,0)OTE(faulted);]]>
+</Text>
+</Rung>
+<Rung Number="6" Type="N">
+<Comment>
+<![CDATA[Map PNS and ACK bits to numbers]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(UO.ack1) OTE(ack.0) ,XIC(UO.ack2) OTE(ack.1) ,XIC(UO.ack3) OTE(ack.2) ,XIC(UO.ack4) OTE(ack.3) ,XIC(UO.ack5) OTE(ack.4) ,XIC(UO.ack6) OTE(ack.5) ,XIC(UO.ack7) OTE(ack.6) ,XIC(UO.ack8) OTE(ack.7) ];]]>
+</Text>
+</Rung>
+<Rung Number="7" Type="N">
+<Comment>
+<![CDATA[
+]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(pns.0) OTE(UI.pns1) ,XIC(pns.1) OTE(UI.pns2) ,XIC(pns.2) OTE(UI.pns3) ,XIC(pns.3) OTE(UI.pns4) ,XIC(pns.4) OTE(UI.pns5) ,XIC(pns.5) OTE(UI.pns6) ,XIC(pns.6) OTE(UI.pns7) ,XIC(pns.7) OTE(UI.pns8) ];]]>
+</Text>
+</Rung>
+<Rung Number="8" Type="N">
+<Comment>
+<![CDATA[Check Some Starting Conditions]]>
+</Comment>
+<Text>
+<![CDATA[EQ(Step,10)[XIC(UO.cmdEnable) XIC(UO.systemReady) XIO(UO.prgRunning) MOVE(20,Step) ,[XIO(UO.cmdEnable) OTL(fault.0) ,XIO(UO.systemReady) OTL(fault.1) ,XIC(UO.prgRunning) OTL(fault.4) ] MOVE(0,Step) ];]]>
+</Text>
+</Rung>
+<Rung Number="9" Type="N">
+<Comment>
+<![CDATA[Set Program Number and SNACK (signal robot to look at program number) & wait for robot to acknowledge
+
+Set Prod Start High (program will start on falling edge)]]>
+</Comment>
+<Text>
+<![CDATA[EQ(Step,20)[MOVE(programNumber,pns) ,OTL(UI.pnsStrobe) ,OTL(UI.prodStart) ,XIC(UO.snack) MOVE(30,Step) ];]]>
+</Text>
+</Rung>
+<Rung Number="10" Type="N">
+<Comment>
+<![CDATA[Check that the Robot Acknowledged the correct program and start if it did.
+
+Otherwise flag as an error]]>
+</Comment>
+<Text>
+<![CDATA[EQ(Step,30)[EQ(programNumber,ack) OTU(UI.prodStart) MOVE(40,Step) ,NE(programNumber,ack) OTL(fault.3) MOVE(0,Step) ];]]>
+</Text>
+</Rung>
+<Rung Number="11" Type="N">
+<Comment>
+<![CDATA[Check that Program is Running. If it is, signal that PNS is done]]>
+</Comment>
+<Text>
+<![CDATA[EQ(Step,40)XIC(UO.prgRunning)[OTL(done) OTU(busy) ,MOVE(0,Step) ];]]>
+</Text>
+</Rung>
+</RLLContent>
+</Routine>
+</Routines>
+<Dependencies>
+<Dependency Type="DataType" Name="robotUI"/>
+<Dependency Type="DataType" Name="robotUO"/>
+</Dependencies>
+</AddOnInstructionDefinition>
+<AddOnInstructionDefinition Name="SeqCtrl" Class="Standard" Revision="3.3" ExecutePrescan="false" ExecutePostscan="false" ExecuteEnableInFalse="false" CreatedDate="2017-04-12T15:18:43.317Z" CreatedBy="A-I-CORP\ZWood" EditedDate="2024-09-04T21:38:06.473Z" EditedBy="A-I-CORP\ZWood" SoftwareRevision="v35.01">
+<RevisionNote>
+<![CDATA[v3.3 Fixed bug where state bits and step where out of sync for 1 scan
+v3.2 fixed bug where first scan would not init to aborted
+v3.1 add state back in and inActiveState outputs and fixed abortVisible bug
+v3.0 Major overhaul of states, cmds, UDTs, etc. See AIC Wiki for details.
+...]]>
+</RevisionNote>
+<Parameters>
+<Parameter Name="EnableIn" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Input - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="EnableOut" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Output - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="mode" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="true" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[System Mode. 0 = Manual (enable HMI). 1 = Auto (disable HMI)]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="autoModeOverride" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Optional bit to externally change the mode to run Auto Mode Code while in Manual Mode]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="disableHmiStart" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="true" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Typically tied to estop. Set to 0 to ignore]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="faulted" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Seq faulted ind]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="running" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Steps 0 - 1999]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="complete" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Step 2000]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="pausing" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Steps 3000-3999]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="paused" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Step 4000]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="restarting" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Steps 5000-5999]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="aborting" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Steps 6000-6999]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="aborted" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Step 7000]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="inAnActiveState" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Seq is executing code]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="cmdStart" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Set on to start/restart the sequence]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="cmdPause" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Set on to pause or hold a running sequence]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="cmdAbort" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Set on to immeditely stop a sequence]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="autoStep" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Enables automatic step transitions]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="singleStep" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Enables a single step transition when autoStep = False]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="hmiCmdStart" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[HMI start command. Enabled when mode = False]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="hmiCmdPause" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[HMI pause command. Enabled when mode = False]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="hmiCmdAbort" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[HMI abort command. Enabled when mode = False]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="hmiStartVisible" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[HMIi start button enable]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="hmiPauseVisible" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[HMI pause button enable]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="hmiAbortVisible" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[HMI abort button enable]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="currentStep" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Active Step Number]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[7000]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="7000"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="nextStep" TagType="Base" DataType="DINT" Usage="Input" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Next Step Number]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[7000]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="7000"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="fault" TagType="Base" DataType="DINT" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Fault code(s). Typically bit addressed]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="ons" TagType="Base" DataType="DINT" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Bits for external ONS use]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="stepBeforeAbort" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[The step number before the most recent successful abort command]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="stepBeforePause" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[The step number before the most recent successful hold command]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="runningStepBeforePause" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[The running step before the last pause.]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="state" TagType="Base" DataType="DINT" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Bit address state indicator for certain more limited HMIs]]>
+</Description>
+<Comments>
+<Comment Operand=".0">
+<![CDATA[running]]>
+</Comment>
+<Comment Operand=".1">
+<![CDATA[complete]]>
+</Comment>
+<Comment Operand=".2">
+<![CDATA[pausing]]>
+</Comment>
+<Comment Operand=".3">
+<![CDATA[paused]]>
+</Comment>
+<Comment Operand=".4">
+<![CDATA[restarting]]>
+</Comment>
+<Comment Operand=".5">
+<![CDATA[aborting]]>
+</Comment>
+<Comment Operand=".6">
+<![CDATA[aborted]]>
+</Comment>
+</Comments>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="startupStep" TagType="Base" DataType="DINT" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[Step which sequence will init to on first scan. Defaults to aborted]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[7000]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="7000"/>
+</DefaultData>
+</Parameter>
+</Parameters>
+<LocalTags>
+<LocalTag Name="internalOns" DataType="DINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="hmiModeSel" DataType="BOOL" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="watchdog" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,0,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="stateUpdated" DataType="BOOL" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+</LocalTags>
+<Routines>
+<Routine Name="Logic" Type="RLL">
+<RLLContent>
+<Rung Number="0" Type="N">
+<Comment>
+<![CDATA[SeqCtrl: Handles the basic logic for state transitions and HMI handling for sequences. 
+
+To Use:
+	- Place on a rung that runs every scan BEFORE any of the steps
+	- Map/set the mode input to True (1) to disable HMI control. 
+	- Map/Set the disableHmiStart input to True (1) to disable the HMI start button, typically for when the safety system is not in a safe state.
+
+Sequences, written externally, should always be interacted with by using the following inputs:
+- cmdStart
+- cmdAbort
+- cmdPause
+- nextStep
+
+NEVER write directly to currentStep.
+
+See AIC Wiki for more details]]>
+</Comment>
+<Text>
+<![CDATA[NOP();]]>
+</Text>
+</Rung>
+<Rung Number="1" Type="N">
+<Comment>
+<![CDATA[Change the startup step on first scan/power on
+]]>
+</Comment>
+<Text>
+<![CDATA[XIC(S:FS)MOVE(startupStep,currentStep)MOVE(startupStep,nextStep);]]>
+</Text>
+</Rung>
+<Rung Number="2" Type="N">
+<Comment>
+<![CDATA[Use a bool and jump label to updated the state (running/aborted/etc) bits twice. 
+- Once here at the beginning before we check what commands are valid, and 
+- a second time at the end once the step has been updated]]>
+</Comment>
+<Text>
+<![CDATA[XIO(stateUpdated)JMP(updateState);]]>
+</Text>
+</Rung>
+<Rung Number="3" Type="N">
+<Text>
+<![CDATA[LBL(begin)NOP();]]>
+</Text>
+</Rung>
+<Rung Number="4" Type="N">
+<Comment>
+<![CDATA[Set the current "mode"
+need to have a pseudo-automode when running code so that IO will respond, but system is not in full running/automode]]>
+</Comment>
+<Text>
+<![CDATA[XIC(mode)XIO(autoModeOverride)OTE(hmiModeSel);]]>
+</Text>
+</Rung>
+<Rung Number="5" Type="N">
+<Comment>
+<![CDATA[/////////   HMI Button Handling   /////////
+
+When valid, set the corresponding PLC command(s) when the HMI requests it. HMI should Set On the commands (once) and this program will turn them off.
+
+Start Button]]>
+</Comment>
+<Text>
+<![CDATA[XIC(hmiCmdStart)ONS(internalOns.1)[XIO(hmiModeSel) XIO(disableHmiStart) OTL(cmdStart) OTL(autoModeOverride) ,OTU(hmiCmdStart) ];]]>
+</Text>
+</Rung>
+<Rung Number="6" Type="N">
+<Comment>
+<![CDATA[Start Button Visibility]]>
+</Comment>
+<Text>
+<![CDATA[XIO(hmiModeSel)XIO(disableHmiStart)[XIC(complete) ,XIC(paused) ,XIC(aborted) ]OTE(hmiStartVisible);]]>
+</Text>
+</Rung>
+<Rung Number="7" Type="N">
+<Comment>
+<![CDATA[Abort]]>
+</Comment>
+<Text>
+<![CDATA[XIC(hmiCmdAbort)ONS(internalOns.2)[XIO(hmiModeSel) OTL(cmdAbort) OTL(autoModeOverride) ,OTU(hmiCmdAbort) ];]]>
+</Text>
+</Rung>
+<Rung Number="8" Type="N">
+<Comment>
+<![CDATA[Abort Button Visibility]]>
+</Comment>
+<Text>
+<![CDATA[XIO(hmiModeSel)XIO(complete)XIO(aborted)OTE(hmiAbortVisible);]]>
+</Text>
+</Rung>
+<Rung Number="9" Type="N">
+<Comment>
+<![CDATA[Pause (Hold)]]>
+</Comment>
+<Text>
+<![CDATA[XIC(hmiCmdPause)ONS(internalOns.4)[XIO(hmiModeSel) OTL(cmdPause) OTL(autoModeOverride) ,OTU(hmiCmdPause) ];]]>
+</Text>
+</Rung>
+<Rung Number="10" Type="N">
+<Comment>
+<![CDATA[Hold Button Visibility]]>
+</Comment>
+<Text>
+<![CDATA[XIO(hmiModeSel)[XIC(running) ,XIC(pausing) ,XIC(restarting) ]OTE(hmiPauseVisible);]]>
+</Text>
+</Rung>
+<Rung Number="11" Type="N">
+<Comment>
+<![CDATA[Reset AutoMode Override]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(aborted) ONS(internalOns.7) ,XIC(complete) ONS(internalOns.8) ,XIC(paused) ONS(internalOns.9) ]OTU(autoModeOverride);]]>
+</Text>
+</Rung>
+<Rung Number="12" Type="N">
+<Comment>
+<![CDATA[In Active State: a shortcut to check if the sequence is running code vs is in and idle state]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(running) ,XIC(pausing) ,XIC(restarting) ,XIC(aborting) ]OTE(inAnActiveState);]]>
+</Text>
+</Rung>
+<Rung Number="13" Type="N">
+<Comment>
+<![CDATA[/////////   Reject Invalid CMDs   /////////
+
+Prevents random bits from getting latched on and causing unexpected execution
+
+
+]]>
+</Comment>
+<Text>
+<![CDATA[XIC(cmdAbort)[XIC(complete) ,XIC(aborting) ,XIC(aborted) ]OTU(cmdAbort)OTU(autoModeOverride);]]>
+</Text>
+</Rung>
+<Rung Number="14" Type="N">
+<Text>
+<![CDATA[XIC(cmdStart)XIO(complete)XIO(aborted)XIO(paused)OTU(cmdStart)OTU(autoModeOverride);]]>
+</Text>
+</Rung>
+<Rung Number="15" Type="N">
+<Text>
+<![CDATA[XIC(cmdPause)XIO(running)XIO(restarting)OTU(cmdPause)OTU(autoModeOverride);]]>
+</Text>
+</Rung>
+<Rung Number="16" Type="N">
+<Comment>
+<![CDATA[/////////   Parse Commands and Transition States   //////////
+
+Any state transition that requires a command should be handled here. Exceptions are:
+- going from running to complete
+- going from pausing to paused
+- going from aborting to aborted
+
+Respond to start command. Varies based on state]]>
+</Comment>
+<Text>
+<![CDATA[XIC(cmdStart)[[XIC(complete) ,XIC(aborted) ] MOVE(0,nextStep) ,XIC(paused) MOVE(5000,nextStep) ,OTU(cmdStart) ];]]>
+</Text>
+</Rung>
+<Rung Number="17" Type="N">
+<Comment>
+<![CDATA[Respond to pause command
+
+]]>
+</Comment>
+<Text>
+<![CDATA[XIC(cmdPause)[MOVE(3000,nextStep) ,ONS(internalOns.13) [MOVE(currentStep,stepBeforePause) ,XIC(running) MOVE(currentStep,runningStepBeforePause) ] ,OTU(cmdPause) ];]]>
+</Text>
+</Rung>
+<Rung Number="18" Type="N">
+<Comment>
+<![CDATA[
+Respond to Abort Command
+
+]]>
+</Comment>
+<Text>
+<![CDATA[XIC(cmdAbort)[MOVE(6000,nextStep) ,ONS(internalOns.12) MOVE(currentStep,stepBeforeAbort) ,OTU(cmdAbort) ];]]>
+</Text>
+</Rung>
+<Rung Number="19" Type="N">
+<Comment>
+<![CDATA[/////////   Step Control   /////////
+
+Enable autoStep to run code normally
+Disable autoStep and manually toggle singleStep for control of sequence execution
+
+NOTE: This should be last rung of any sort of step control logic so that all parsing and checks of commands happen before the step number acutally changes.
+
+]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(autoStep) ,XIC(singleStep) ][MOVE(nextStep,currentStep) ,OTU(singleStep) ];]]>
+</Text>
+</Rung>
+<Rung Number="20" Type="N">
+<Text>
+<![CDATA[LBL(updateState)NOP();]]>
+</Text>
+</Rung>
+<Rung Number="21" Type="N">
+<Comment>
+<![CDATA[/////////   Set Status Bits   /////////
+
+
+Running Status]]>
+</Comment>
+<Text>
+<![CDATA[LIMIT(0,currentStep,1999)OTE(running);]]>
+</Text>
+</Rung>
+<Rung Number="22" Type="N">
+<Comment>
+<![CDATA[Complete Status]]>
+</Comment>
+<Text>
+<![CDATA[EQ(currentStep,2000)OTE(complete);]]>
+</Text>
+</Rung>
+<Rung Number="23" Type="N">
+<Comment>
+<![CDATA[Pausing Status]]>
+</Comment>
+<Text>
+<![CDATA[LIMIT(3000,currentStep,3999)OTE(pausing);]]>
+</Text>
+</Rung>
+<Rung Number="24" Type="N">
+<Comment>
+<![CDATA[Paused Status]]>
+</Comment>
+<Text>
+<![CDATA[EQ(currentStep,4000)OTE(paused);]]>
+</Text>
+</Rung>
+<Rung Number="25" Type="N">
+<Comment>
+<![CDATA[Restarting Status]]>
+</Comment>
+<Text>
+<![CDATA[LIMIT(5000,currentStep,5999)OTE(restarting);]]>
+</Text>
+</Rung>
+<Rung Number="26" Type="N">
+<Comment>
+<![CDATA[Aborting Status]]>
+</Comment>
+<Text>
+<![CDATA[LIMIT(6000,currentStep,6999)OTE(aborting);]]>
+</Text>
+</Rung>
+<Rung Number="27" Type="N">
+<Comment>
+<![CDATA[Aborted Status]]>
+</Comment>
+<Text>
+<![CDATA[EQ(currentStep,7000)OTE(aborted);]]>
+</Text>
+</Rung>
+<Rung Number="28" Type="N">
+<Comment>
+<![CDATA[Use stateUpdated bit to call this chunk of code twice. Once at the beginning in case someone messed with currentStep and then at the end in normal order to reflect what changed]]>
+</Comment>
+<Text>
+<![CDATA[XIO(stateUpdated)OTL(stateUpdated)JMP(begin);]]>
+</Text>
+</Rung>
+<Rung Number="29" Type="N">
+<Text>
+<![CDATA[OTU(stateUpdated);]]>
+</Text>
+</Rung>
+<Rung Number="30" Type="N">
+<Comment>
+<![CDATA[/////////   Faulted Status   /////////
+
+Set faulted status bit if any fault bit is set on]]>
+</Comment>
+<Text>
+<![CDATA[NE(fault,0)OTE(faulted);]]>
+</Text>
+</Rung>
+<Rung Number="31" Type="N">
+<Comment>
+<![CDATA[Create a bit addressed state output for HMIs with limited functionality (like C-More or View Studio)]]>
+</Comment>
+<Text>
+<![CDATA[XIC(running)OTE(state.0);]]>
+</Text>
+</Rung>
+<Rung Number="32" Type="N">
+<Text>
+<![CDATA[XIC(complete)OTE(state.1);]]>
+</Text>
+</Rung>
+<Rung Number="33" Type="N">
+<Text>
+<![CDATA[XIC(pausing)OTE(state.2);]]>
+</Text>
+</Rung>
+<Rung Number="34" Type="N">
+<Text>
+<![CDATA[XIC(paused)OTE(state.3);]]>
+</Text>
+</Rung>
+<Rung Number="35" Type="N">
+<Text>
+<![CDATA[XIC(restarting)OTE(state.4);]]>
+</Text>
+</Rung>
+<Rung Number="36" Type="N">
+<Text>
+<![CDATA[XIC(aborting)OTE(state.5);]]>
+</Text>
+</Rung>
+<Rung Number="37" Type="N">
+<Text>
+<![CDATA[XIC(aborted)OTE(state.6);]]>
+</Text>
+</Rung>
+</RLLContent>
+</Routine>
+</Routines>
+</AddOnInstructionDefinition>
+<AddOnInstructionDefinition Use="Target" Name="FanucRobot" Class="Standard" Revision="1.4" ExecutePrescan="false" ExecutePostscan="false" ExecuteEnableInFalse="false" CreatedDate="2021-10-18T17:00:59.819Z" CreatedBy="A-I-CORP\ZWood" EditedDate="2025-11-19T02:25:29.668Z" EditedBy="ROCKWELL-VM\Zac" SoftwareRevision="v37.00">
+<RevisionNote>
+<![CDATA[v1.4: added faulted status
+V1.3 - added seq faults to reset input and fixed some issues with auto aborting
+V1.2 - Updated to Seq V3.2
+V1.1 - Updated to Seq V3.1
+V1.0 - Updated for new seq
+V0.2 - Updated to use fanucPNS instead of PNS_Action
+V0.1 - Inital Release
+]]>
+</RevisionNote>
+<Parameters>
+<Parameter Name="EnableIn" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Input - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="EnableOut" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read Only">
+<Description>
+<![CDATA[Enable Output - System Defined Parameter]]>
+</Description>
+</Parameter>
+<Parameter Name="seq" TagType="Base" DataType="SeqCtrl" Usage="InOut" Required="true" Visible="true" Constant="false">
+<Comments>
+<Comment Operand=".FAULT.0">
+<![CDATA[Robot fault did not reset when running]]>
+</Comment>
+<Comment Operand=".FAULT.1">
+<![CDATA[Robot did not stop (cstopi)]]>
+</Comment>
+<Comment Operand=".FAULT.2">
+<![CDATA[CMD Enable not on]]>
+</Comment>
+<Comment Operand=".FAULT.3">
+<![CDATA[System Ready not on]]>
+</Comment>
+<Comment Operand=".FAULT.4">
+<![CDATA[Prog Num Select took too long]]>
+</Comment>
+<Comment Operand=".FAULT.5">
+<![CDATA[Program Number Echo did not match]]>
+</Comment>
+<Comment Operand=".FAULT.6">
+<![CDATA[Program already running]]>
+</Comment>
+<Comment Operand=".FAULT.7">
+<![CDATA[Robot did not reset fault during restart]]>
+</Comment>
+<Comment Operand=".FAULT.8">
+<![CDATA[Robot did not restart]]>
+</Comment>
+<Comment Operand=".FAULT.9">
+<![CDATA[Robot aborted itself]]>
+</Comment>
+<Comment Operand=".FAULT.10">
+<![CDATA[Robot alarm not recoverable. Robot aborted]]>
+</Comment>
+<Comment Operand=".FAULT.11">
+<![CDATA[Robot did not Hold (pause)]]>
+</Comment>
+</Comments>
+</Parameter>
+<Parameter Name="mode" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="true" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[for seq]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[1]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="1"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="disableHmiStart" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="true" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[for seq]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="robotUI" TagType="Base" DataType="robotUI" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="robotUO" TagType="Base" DataType="robotUO" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="progNumber" TagType="Base" DataType="SINT" Usage="Input" Radix="Decimal" Required="true" Visible="true" ExternalAccess="Read/Write">
+<DefaultData Format="L5K">
+<![CDATA[1]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="SINT" Radix="Decimal" Value="1"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="enableRobotHold" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="Read/Write">
+<DefaultData Format="L5K">
+<![CDATA[1]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="1"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="allowableAlarms" TagType="Base" DataType="robotAlarmCode" Dimensions="20" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="robotLastAlarm" TagType="Base" DataType="robotString" Usage="InOut" Required="true" Visible="true" Constant="false"/>
+<Parameter Name="resetRobotFault" TagType="Base" DataType="BOOL" Usage="Input" Radix="Decimal" Required="false" Visible="false" ExternalAccess="None">
+<Description>
+<![CDATA[Set On]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+<Parameter Name="faulted" TagType="Base" DataType="BOOL" Usage="Output" Radix="Decimal" Required="false" Visible="true" ExternalAccess="Read/Write">
+<Description>
+<![CDATA[seq or robot fault]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</Parameter>
+</Parameters>
+<LocalTags>
+<LocalTag Name="ons" DataType="DINT" Radix="Decimal" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="robotFaultResetTimeout1" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,1000,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="1000"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="cycleStopTimeout" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,2000,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="2000"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="PNS" DataType="FanucPNS" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[1,0,0,0,0,[0,3000,0],0,0,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="FanucPNS">
+<DataValueMember Name="EnableIn" DataType="BOOL" Value="1"/>
+<DataValueMember Name="EnableOut" DataType="BOOL" Value="0"/>
+<DataValueMember Name="busy" DataType="BOOL" Value="0"/>
+<DataValueMember Name="fault" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="faulted" DataType="BOOL" Value="0"/>
+<DataValueMember Name="statusCode" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="done" DataType="BOOL" Value="0"/>
+<DataValueMember Name="programNumber" DataType="DINT" Radix="Decimal" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="robotFaultResetTimeout2" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,1000,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="1000"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="startRobot" DataType="BOOL" Radix="Decimal" ExternalAccess="None">
+<Description>
+<![CDATA[Set On]]>
+</Description>
+<DefaultData Format="L5K">
+<![CDATA[0]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<DataValue DataType="BOOL" Radix="Decimal" Value="0"/>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="robotRestartTimeout" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,2000,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="2000"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="alarmLookup" DataType="FanucAlarmLookup" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[1,[0,'$00$00$00$00$00$00$00$00'],0,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="FanucAlarmLookup">
+<DataValueMember Name="EnableIn" DataType="BOOL" Value="1"/>
+<DataValueMember Name="EnableOut" DataType="BOOL" Value="0"/>
+<DataValueMember Name="recoverableAlarm" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="faultResetTimer" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,250,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="250"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="startTimer" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,250,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="250"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+<LocalTag Name="holdTimeout" DataType="TIMER" ExternalAccess="None">
+<DefaultData Format="L5K">
+<![CDATA[[0,2000,0]]]>
+</DefaultData>
+<DefaultData Format="Decorated">
+<Structure DataType="TIMER">
+<DataValueMember Name="PRE" DataType="DINT" Radix="Decimal" Value="2000"/>
+<DataValueMember Name="ACC" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="EN" DataType="BOOL" Value="0"/>
+<DataValueMember Name="TT" DataType="BOOL" Value="0"/>
+<DataValueMember Name="DN" DataType="BOOL" Value="0"/>
+</Structure>
+</DefaultData>
+</LocalTag>
+</LocalTags>
+<Routines>
+<Routine Name="Logic" Type="RLL">
+<RLLContent>
+<Rung Number="0" Type="N">
+<Comment>
+<![CDATA[FanucRobot: Runs a sequence that handles starting, stopping, pausing, etc. a Fanuc robot using the PNS interface via UOP (user operator panel) signals.
+
+To Use: 
+- Place on a rung that runs every scan
+- Create a SeqCtrl variable and set or map the mode and disableHmiStart variables in the same way used to set up a SeqCtrl AOI.
+- Input/Map the robot's UI and UO signals 
+- Create or map an existing allowable alarm codes array (see FanucAlarmLookup AOI documentation)
+- Input the current robot last alarm string
+
+
+Sequence Faults:
+Bit 0: Robot did not reset during running
+Bit 1: Robot did not stop (via CSTOP)
+Bit 2: Cmd Enable UO is not on
+Bit 3: System Ready UO is not on
+Bit 4: Program number select took too long
+Bit 5: Program number echo did not match
+Bit 6: Program already running
+Bit 7: Robot did not reset during restart
+Bit 8: Robot did not restart
+Bit 9: Robot aborted itself
+Bit 10: Robot alarm not recoverable. Robot aborted
+Bit 11: Robot did not hold. Aborting.]]>
+</Comment>
+<Text>
+<![CDATA[NOP();]]>
+</Text>
+</Rung>
+<Rung Number="1" Type="N">
+<Comment>
+<![CDATA[/////////   Prescan  /////////
+i.e. Robot IO Mapping
+
+
+///   IO Mapping   ///
+
+Set imstop, sfspd, and enable on so the robot can run]]>
+</Comment>
+<Text>
+<![CDATA[[OTE(robotUI.IMSTP) ,OTE(robotUI.SFSPD) ,OTE(robotUI.enable) ];]]>
+</Text>
+</Rung>
+<Rung Number="2" Type="N">
+<Comment>
+<![CDATA[Auto-reset the hold (pause) signal if it is off and the robot has stopped running a program]]>
+</Comment>
+<Text>
+<![CDATA[XIO(robotUI.hold)XIO(robotUO.prgRunning)OTL(robotUI.hold);]]>
+</Text>
+</Rung>
+<Rung Number="3" Type="N">
+<Comment>
+<![CDATA[Pulse the Reset Output to the robot and reset any seq faults upon request]]>
+</Comment>
+<Text>
+<![CDATA[XIC(resetRobotFault)[TON(faultResetTimer,?,?) ,ONS(ons.7) MOVE(0,seq.fault) ,XIC(faultResetTimer.TT) OTE(robotUI.faultReset) ,XIC(faultResetTimer.DN) OTU(resetRobotFault) ];]]>
+</Text>
+</Rung>
+<Rung Number="4" Type="N">
+<Comment>
+<![CDATA[Pulse the Start Output]]>
+</Comment>
+<Text>
+<![CDATA[XIC(startRobot)[TON(startTimer,?,?) ,XIC(startTimer.TT) OTE(robotUI.start) ,XIC(startTimer.DN) OTU(startRobot) ];]]>
+</Text>
+</Rung>
+<Rung Number="5" Type="N">
+<Comment>
+<![CDATA[faulted status]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(robotUO.fault) ,XIC(seq.faulted) ]OTE(faulted);]]>
+</Text>
+</Rung>
+<Rung Number="6" Type="N">
+<Comment>
+<![CDATA[///   Sequence Commands   ///
+
+Abort if the robot stops itself (once the robot has been started) or if it pauses and robot holds are not enabled
+
+]]>
+</Comment>
+<Text>
+<![CDATA[[XIC(seq.running) XIO(enableRobotHold) XIO(robotUO.prgRunning) XIC(robotUO.prgPaused) ONS(ons.3) ,XIO(robotUO.prgRunning) XIO(robotUO.prgPaused) ONS(ons.6) XIO(seq.aborted) XIO(seq.aborting) XIO(seq.complete) NE(seq.currentStep,130) OTL(seq.fault.9) ]OTL(seq.cmdAbort);]]>
+</Text>
+</Rung>
+<Rung Number="7" Type="N">
+<Comment>
+<![CDATA[Pause Command
+
+If enabled, pause this program if the robot holds (paused) itself after the robot is running]]>
+</Comment>
+<Text>
+<![CDATA[XIC(seq.running)EQ(seq.currentStep,300)XIC(enableRobotHold)XIO(robotUO.prgRunning)XIC(robotUO.prgPaused)ONS(ons.4)OTL(seq.cmdPause);]]>
+</Text>
+</Rung>
+<Rung Number="8" Type="N">
+<Comment>
+<![CDATA[If robot pauses itself due to a fault, check that the fault is allowed. If not, abort.]]>
+</Comment>
+<Text>
+<![CDATA[XIC(seq.paused)ONS(ons.5)XIC(robotUO.fault)[FanucAlarmLookup(alarmLookup,allowableAlarms,robotLastAlarm) ,XIO(alarmLookup.recoverableAlarm) OTL(seq.fault.10) OTL(seq.cmdAbort) ];]]>
+</Text>
+</Rung>
+<Rung Number="9" Type="N">
+<Comment>
+<![CDATA[/////////   Sequence Status and Control   /////////]]>
+</Comment>
+<Text>
+<![CDATA[SeqCtrl(seq,mode,disableHmiStart);]]>
+</Text>
+</Rung>
+<Rung Number="10" Type="N">
+<Comment>
+<![CDATA[/////////   RUNNING   /////////
+
+Steps reserved for future use]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,0)MOVE(100,seq.nextStep);]]>
+</Text>
+</Rung>
+<Rung Number="11" Type="N">
+<Comment>
+<![CDATA[reset the CStop (abort) bit]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,100)[OTU(robotUI.cstop) ,MOVE(110,seq.nextStep) ];]]>
+</Text>
+</Rung>
+<Rung Number="12" Type="N">
+<Comment>
+<![CDATA[Reset any robot faults. Abort if it doesn't reset.]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,110)[XIC(robotUO.fault) [ONS(ons.0) OTL(resetRobotFault) ,TON(robotFaultResetTimeout1,?,?) ,XIC(robotFaultResetTimeout1.DN) OTL(seq.fault.0) OTL(seq.cmdAbort) ] ,XIO(robotUO.fault) MOVE(120,seq.nextStep) ];]]>
+</Text>
+</Rung>
+<Rung Number="13" Type="N">
+<Comment>
+<![CDATA[Check if the robot is running a program. If it is, jump past PNS call.
+
+If the program is paused, abort it so that it can be reset via the PNS call.]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,120)[XIC(robotUO.prgRunning) MOVE(300,seq.nextStep) ,XIO(robotUO.prgRunning) [XIO(robotUO.prgPaused) MOVE(200,seq.nextStep) ,XIC(robotUO.prgPaused) [OTL(robotUI.cstop) ,MOVE(130,seq.nextStep) ] ] ];]]>
+</Text>
+</Rung>
+<Rung Number="14" Type="N">
+<Comment>
+<![CDATA[Wait for the current program to abort]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,130)[XIO(robotUO.prgRunning) XIO(robotUO.prgPaused) [OTU(robotUI.cstop) ,MOVE(200,seq.nextStep) ] ,XIC(robotUI.cstop) TON(cycleStopTimeout,?,?) ,XIC(cycleStopTimeout.DN) OTL(seq.fault.1) OTL(seq.cmdAbort) ];]]>
+</Text>
+</Rung>
+<Rung Number="15" Type="N">
+<Comment>
+<![CDATA[Start the robot
+
+Run the PNS Routine to start the robot's main program]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,200)[FanucPNS(PNS,progNumber,robotUI,robotUO) ,XIC(PNS.done) MOVE(300,seq.nextStep) ,XIC(PNS.faulted) BTD(PNS.fault,0,seq.fault,2,5) OTL(seq.cmdAbort) ];]]>
+</Text>
+</Rung>
+<Rung Number="16" Type="N">
+<Comment>
+<![CDATA[Robot Running
+
+Robot should run continously and interact with other programs for whatever process(es) need to happen. 
+This program will never go to complete but instead will mimic the robot state with abort or hold.]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,300)NOP();]]>
+</Text>
+</Rung>
+<Rung Number="17" Type="N">
+<Comment>
+<![CDATA[/////////   COMPLETE   /////////
+
+Step 2000. Waiting for start cmd
+Note: This program should NEVER reach this state.]]>
+</Comment>
+<Text>
+<![CDATA[NOP();]]>
+</Text>
+</Rung>
+<Rung Number="18" Type="N">
+<Comment>
+<![CDATA[/////////   Pausing   /////////
+
+Pause the robot with the hold UO bit. If the robot doesn't respond, abort.]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,3000)[OTU(robotUI.hold) ,XIC(robotUO.prgPaused) MOVE(4000,seq.nextStep) ,XIO(robotUO.prgPaused) TON(holdTimeout,?,?) ,XIC(holdTimeout.DN) OTL(seq.fault.11) OTL(seq.cmdAbort) ];]]>
+</Text>
+</Rung>
+<Rung Number="19" Type="N">
+<Comment>
+<![CDATA[/////////   Paused   /////////
+
+Step 4000: Robot Paused. Wait for restart command.]]>
+</Comment>
+<Text>
+<![CDATA[NOP();]]>
+</Text>
+</Rung>
+<Rung Number="20" Type="N">
+<Comment>
+<![CDATA[/////////   Restarting    /////////]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,5000)MOVE(5100,seq.nextStep);]]>
+</Text>
+</Rung>
+<Rung Number="21" Type="N">
+<Comment>
+<![CDATA[Reset any robot faults again]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,5100)[XIC(robotUO.fault) [ONS(ons.1) OTL(resetRobotFault) ,TON(robotFaultResetTimeout2,?,?) ,XIC(robotFaultResetTimeout2.DN) OTL(seq.fault.7) OTL(seq.cmdAbort) ] ,XIO(robotUO.fault) MOVE(5110,seq.nextStep) ];]]>
+</Text>
+</Rung>
+<Rung Number="22" Type="N">
+<Comment>
+<![CDATA[Restart the robot program by setting the "start" output and returning to the last known step in this program]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,5110)[ONS(ons.2) OTL(startRobot) ,XIC(robotUO.prgRunning) MOVE(300,seq.nextStep) ,TON(robotRestartTimeout,?,?) ,XIC(robotRestartTimeout.DN) OTL(seq.fault.8) MOVE(3000,seq.nextStep) ];]]>
+</Text>
+</Rung>
+<Rung Number="23" Type="N">
+<Comment>
+<![CDATA[/////////   ABORTING   /////////
+
+Set the cycle stop output and wait for the robot program to abort (not paused and not running)]]>
+</Comment>
+<Text>
+<![CDATA[EQ(seq.currentStep,6000)[[XIC(robotUO.prgRunning) ,XIC(robotUO.prgPaused) ] OTL(robotUI.cstop) ,XIO(robotUO.prgRunning) XIO(robotUO.prgPaused) [OTU(robotUI.cstop) ,MOVE(7000,seq.nextStep) ] ];]]>
+</Text>
+</Rung>
+<Rung Number="24" Type="N">
+<Comment>
+<![CDATA[/////////   ABORTED   /////////
+
+Step 7000: Robot program stopped. Waiting for start command]]>
+</Comment>
+<Text>
+<![CDATA[NOP();]]>
+</Text>
+</Rung>
+</RLLContent>
+</Routine>
+</Routines>
+<Dependencies>
+<Dependency Type="AddOnInstructionDefinition" Name="SeqCtrl"/>
+<Dependency Type="DataType" Name="robotUI"/>
+<Dependency Type="DataType" Name="robotUO"/>
+<Dependency Type="DataType" Name="robotAlarmCode"/>
+<Dependency Type="DataType" Name="robotString"/>
+<Dependency Type="AddOnInstructionDefinition" Name="FanucPNS"/>
+<Dependency Type="AddOnInstructionDefinition" Name="FanucAlarmLookup"/>
+</Dependencies>
+</AddOnInstructionDefinition>
+</AddOnInstructionDefinitions>
+</Controller>
+</RSLogix5000Content>

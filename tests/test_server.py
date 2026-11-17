@@ -8,10 +8,18 @@ from pathlib import Path
 
 import pytest
 from mcp import Client, StdioServerParameters
+from py_l5x import load
 
-from l5x_mcp import parse_args
+from l5x_mcp import main, parse_args
 from l5x_mcp.registry import ProjectRegistry
-from l5x_mcp.server import TOOLS, _strip_registry_doc, create_server
+from l5x_mcp.server import (
+    EDIT_INSTRUCTIONS,
+    INSTRUCTIONS,
+    TOOLS,
+    WRITE_TOOLS,
+    _strip_registry_doc,
+    create_server,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -19,6 +27,8 @@ LOGIC_CALL = (
     "get_routine_logic",
     {"routine": "Logic", "aoi": "Debounce", "path": "example.L5X"},
 )
+WRITE_NAMES = {fn.__name__ for fn in WRITE_TOOLS}
+READ_NAMES = {fn.__name__ for fn in TOOLS}
 
 
 @pytest.fixture
@@ -32,6 +42,16 @@ def server(fixtures_dir):
 
 
 @pytest.fixture
+def read_only_server(fixtures_dir):
+    return create_server(ProjectRegistry(fixtures_dir), read_only=True)
+
+
+@pytest.fixture
+def writable_server(editable):
+    return create_server(editable)
+
+
+@pytest.fixture
 def structured_server(fixtures_dir):
     return create_server(ProjectRegistry(fixtures_dir), structured_output=True)
 
@@ -41,17 +61,55 @@ def _payload(result):
     return json.loads(result.content[0].text)
 
 
-async def test_lists_every_tool_with_clean_schema(server):
+async def test_lists_read_and_write_tools_by_default(server):
     async with Client(server) as client:
-        tools = (await client.list_tools()).tools
+        tools = {t.name: t for t in (await client.list_tools()).tools}
 
-    assert {t.name for t in tools} == {fn.__name__ for fn in TOOLS}
-    for tool in tools:
-        assert "registry" not in tool.input_schema.get("properties", {})
-        assert "registry:" not in (tool.description or "")
-        assert tool.description, f"{tool.name} has no description"
-        assert tool.annotations.read_only_hint is True
-        assert tool.output_schema is None
+    assert set(tools) == READ_NAMES | WRITE_NAMES
+    assert "get_spec" in READ_NAMES
+    for name, tool in tools.items():
+        assert "registry" not in tool.input_schema.get("properties", {}), name
+        assert "registry:" not in (tool.description or ""), name
+        assert tool.description, f"{name} has no description"
+        assert tool.output_schema is None, name
+        expected_read_only = name in READ_NAMES
+        assert tool.annotations.read_only_hint is expected_read_only, name
+        if not expected_read_only:
+            assert tool.annotations.destructive_hint is False, name
+            assert tool.annotations.idempotent_hint is False, name
+            assert tool.annotations.open_world_hint is False, name
+
+
+async def test_read_only_mode_registers_only_read_tools(read_only_server):
+    async with Client(read_only_server) as client:
+        tools = (await client.list_tools()).tools
+        instructions = client.instructions
+
+    assert {t.name for t in tools} == READ_NAMES
+    assert all(t.annotations.read_only_hint is True for t in tools)
+    assert instructions == INSTRUCTIONS
+    assert "Editing" not in instructions
+
+
+async def test_read_only_mode_refuses_write_calls(read_only_server):
+    async with Client(read_only_server) as client:
+        result = await client.call_tool(
+            "add_tags",
+            {"tags": [{"name": "X", "data_type": "DINT"}], "output_path": "o.L5X"},
+        )
+
+    assert result.is_error
+
+
+async def test_write_mode_instructions_describe_editing(server):
+    async with Client(server) as client:
+        instructions = client.instructions
+
+    assert instructions == EDIT_INSTRUCTIONS
+    assert "NEW .L5X" in instructions
+    assert "get_spec" in instructions
+    assert "Import Component" in instructions
+    assert "MOVE" in instructions
 
 
 async def test_default_returns_one_compact_json_block(server):
@@ -86,13 +144,70 @@ async def test_structured_mode_advertises_schema_and_content(structured_server):
     assert result.structured_content["container"] == {"kind": "aoi", "name": "Debounce"}
 
 
-async def test_structured_mode_keeps_read_only_annotations(structured_server):
+async def test_structured_mode_keeps_annotations(structured_server):
     async with Client(structured_server) as client:
         tools = (await client.list_tools()).tools
 
+    assert {t.name for t in tools} == READ_NAMES | WRITE_NAMES
     for tool in tools:
-        assert tool.annotations.read_only_hint is True
         assert tool.output_schema is not None, tool.name
+        assert tool.annotations.read_only_hint is (tool.name in READ_NAMES), tool.name
+
+
+async def test_write_tool_round_trip_through_mcp(writable_server, editable):
+    source = editable.root / "example.L5X"
+    before = source.read_bytes()
+
+    async with Client(writable_server) as client:
+        result = await client.call_tool(
+            "add_tags",
+            {
+                "tags": [
+                    {"name": "McpProbe", "data_type": "TIMER", "value": {"PRE": 250}},
+                ],
+                "output_path": "mcp_out.L5X",
+                "path": "example.L5X",
+            },
+        )
+
+    assert not result.is_error, result.content[0].text
+    assert _payload(result)["added"] == ["McpProbe"]
+    assert source.read_bytes() == before
+    tag = load(str(editable.root / "mcp_out.L5X")).controller_tags["McpProbe"]
+    assert tag.to_python()["PRE"] == 250
+
+
+async def test_write_spec_with_unknown_field_is_rejected_before_running(
+    writable_server, editable
+):
+    async with Client(writable_server) as client:
+        result = await client.call_tool(
+            "add_tags",
+            {
+                "tags": [{"name": "Typo", "data_type": "DINT", "descripton": "x"}],
+                "output_path": "typo.L5X",
+                "path": "example.L5X",
+            },
+        )
+
+    assert result.is_error
+    assert "descripton" in result.content[0].text
+    assert not (editable.root / "typo.L5X").exists()
+
+
+async def test_write_error_reaches_the_model(writable_server):
+    async with Client(writable_server) as client:
+        result = await client.call_tool(
+            "add_tags",
+            {
+                "tags": [{"name": "Bad", "data_type": "NOTATYPE"}],
+                "output_path": "bad.L5X",
+                "path": "example.L5X",
+            },
+        )
+
+    assert result.is_error
+    assert "unknown data type 'NOTATYPE'" in result.content[0].text
 
 
 @pytest.mark.parametrize("srv_fixture", ["server", "structured_server"])
@@ -230,6 +345,56 @@ def test_structured_output_flag_overrides_env(monkeypatch):
     assert parse_args(["--structured-output"]).structured_output is True
     monkeypatch.setenv("L5X_MCP_STRUCTURED_OUTPUT", "0")
     assert parse_args(["--structured-output"]).structured_output is True
+
+
+def test_read_only_default_off(monkeypatch):
+    monkeypatch.delenv("L5X_MCP_READ_ONLY", raising=False)
+    assert parse_args([]).read_only is False
+
+
+@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "On", " on "])
+def test_read_only_env_truthy(monkeypatch, value):
+    monkeypatch.setenv("L5X_MCP_READ_ONLY", value)
+    assert parse_args([]).read_only is True
+
+
+@pytest.mark.parametrize("value", ["0", "false", "no", "off", "", "maybe"])
+def test_read_only_env_falsy(monkeypatch, value):
+    monkeypatch.setenv("L5X_MCP_READ_ONLY", value)
+    assert parse_args([]).read_only is False
+
+
+def test_read_only_flag(monkeypatch):
+    monkeypatch.delenv("L5X_MCP_READ_ONLY", raising=False)
+    assert parse_args(["--read-only"]).read_only is True
+
+
+def test_read_only_flag_is_independent_of_structured_output(monkeypatch):
+    monkeypatch.delenv("L5X_MCP_READ_ONLY", raising=False)
+    args = parse_args(["--read-only", "--structured-output"])
+    assert args.read_only is True
+    assert args.structured_output is True
+
+
+def test_main_passes_read_only_to_the_server(monkeypatch, fixtures_dir):
+    monkeypatch.delenv("L5X_MCP_READ_ONLY", raising=False)
+    calls = {}
+
+    class FakeServer:
+        def run(self, transport):
+            calls["transport"] = transport
+
+    def fake_create_server(registry, **kwargs):
+        calls["root"] = registry.root
+        calls.update(kwargs)
+        return FakeServer()
+
+    monkeypatch.setattr("l5x_mcp.server.create_server", fake_create_server)
+    main(["--root", str(fixtures_dir), "--read-only"])
+
+    assert calls["read_only"] is True
+    assert calls["root"] == fixtures_dir.resolve()
+    assert calls["transport"] == "stdio"
 
 
 def test_strip_registry_doc():

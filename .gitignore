@@ -218,3 +218,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---------------------------------------------------------------------
+# Project Specific Stuff
+# ---------------------------------------------------------------------
+
+# SDK harness (tools/sdk): generated run folders and pulled VM results
+tools/sdk/run*/
+tools/sdk/dbg*/
+tools/sdk/results/

@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<RSLogix5000Content SchemaRevision="1.0" SoftwareRevision="37.00" TargetName="CompMotor" TargetType="DataType" ContainsContext="true">
+<Controller Use="Context" Name="Exported">
+<DataTypes Use="Context">
+<DataType Use="Target" Name="CompMotor" Family="NoFamily" Class="User">
+<Description>
+<![CDATA[Component UDT]]>
+</Description>
+<Members>
+<Member Name="ZZZZZZZZZZCompMotor0" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="Run" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZCompMotor0" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="Fault" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZCompMotor0" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="Speed" DataType="REAL" Dimension="0" Radix="Float" Hidden="false" ExternalAccess="Read/Write"/>
+<Member Name="Tmr" DataType="TIMER" Dimension="0" Radix="NullType" Hidden="false" ExternalAccess="Read/Write"/>
+<Member Name="Counts" DataType="DINT" Dimension="3" Radix="Decimal" Hidden="false" ExternalAccess="Read/Write"/>
+</Members>
+</DataType>
+</DataTypes>
+</Controller>
+</RSLogix5000Content>

@@ -4,7 +4,9 @@ A personal project to add AI tools to my Studio 5000 workflow.
 
 ## What it is
 
-This is a Model Context Protocol (MCP) server that exposes a read-only interface to Rockwell Automation Studio 5000 Logix Designer projects exported as `.L5X` (XML) files. It allows LLM coding agents (VS Code Copilot Chat, GitHub Copilot CLI) to explore project structure, list programs and routines, examine logic code, look up tags and data types, and find cross-references—without reading the large raw XML themselves.
+This is a Model Context Protocol (MCP) server for Rockwell Automation Studio 5000 Logix Designer projects exported as `.L5X` (XML) files. It allows LLM coding agents (VS Code Copilot Chat, GitHub Copilot CLI) to explore project structure, list programs and routines, examine logic code, look up tags and data types, and find cross-references—without reading the large raw XML themselves.
+
+It can also **edit projects and create components** (UDTs, AOIs, programs, routines, rungs, tags) as Studio import files. Write tools never modify their input: every edit is written to a new `.L5X` file. Run with `--read-only` to expose only the read tools (see [Write tools](#write-tools)).
 
 **Important limitations:** This is work in progress. The underlying `py_l5x` parser currently supports **RLL (ladder rungs) and ST (structured text) routines only**. FBD (function block diagram) and SFC (sequential function chart) routines are recognized but their logic is not parsed; tools will return a note that these types are unsupported.
 
@@ -262,6 +264,52 @@ GitHub Copilot CLI (`~/.copilot/mcp-config.json` or `.mcp.json`), flag set throu
 | **find_references**   | Find uses of a tag, instruction, or text in program and AOI logic. Comments are ignored for `tag`/`instruction` on ST                           | `query`, `kind='tag'` (`tag`/`instruction`/`text`), `program=None`, `include_aois=True`, `limit=200`, `path=None`                              |
 | **instruction_usage** | Count instruction mnemonics used across all programs (or limit to one)                                                                          | `program=None`, `path=None`                                                                                                                    |
 
+## Write tools
+
+Write tools are enabled by default. Start the server with `--read-only` (or set
+`L5X_MCP_READ_ONLY=1`, also `true`, `yes` or `on`) to register only the read tools.
+
+Rules shared by every write tool:
+
+- The source project (`path`) is **never modified**. The result is written to
+  `output_path`, which is required, must end in `.L5X`, must be inside the server root,
+  and must not be the source file. An existing output is only replaced with
+  `overwrite=true`.
+- To chain edits, pass the previous call's output as the next call's `path`.
+- Edits are all-or-nothing: if any part fails, no file is written.
+- Renames and removals of tags, routines and programs don't rewrite logic. The result
+  lists the remaining `references` so they can be fixed. `rename_aoi` does rewrite call
+  sites, and `rename_data_type` updates every tag, member and parameter of that type.
+- Logic is only checked for balanced brackets and a trailing `;`. Undefined tags and
+  wrong instructions show up when Studio verifies the project. Use instructions that
+  exist in your version (v36+ uses `MOVE`, `EQ`, … instead of `MOV`, `EQU`, …).
+
+UDTs, AOIs, programs and tags are described by JSON **specs**, whose fields are listed in
+each tool's input schema. `get_spec` returns an existing object's spec in exactly the
+form the add/replace tools accept, so the usual way to change an object is
+`get_spec` → edit → `replace_*`.
+
+| Tool | Purpose |
+| --- | --- |
+| **get_spec** (read-only) | Spec of an existing UDT, AOI, program, tag or routine |
+| **add_tags** / **remove_tags** / **rename_tag** | Add base or alias tags (with values and operand comments), remove or rename tags |
+| **set_tag_values** | Set values by operand path: scalars, structure members, array elements, strings, TIME |
+| **update_tag** | Tag description, operand comments and operand metadata (units, min/max, states) |
+| **add_routine** / **remove_routine** / **rename_routine** | Program routines (RLL or ST) |
+| **add_rungs** / **replace_rung** / **remove_rungs** | Ladder rungs (insert, change text or comment, delete) |
+| **set_st_lines** | Replace an ST routine's source |
+| **add_data_type** / **replace_data_type** / **rename_data_type** / **remove_data_type** | UDTs. Replace migrates every instance by member name, the way Studio does |
+| **add_aoi** / **replace_aoi** / **rename_aoi** / **remove_aoi** | AOIs. Replace migrates instances and protects call sites from signature changes |
+| **add_program** / **replace_program** / **rename_program** / **remove_program** | Programs with tags and routines |
+| **schedule_program** | Schedule, move or unschedule a program |
+| **set_description** | Description of a program, routine, UDT or AOI |
+| **export_component** | Write existing objects (UDT, AOI, program, routine, rungs, tags) as an Import Component file with their dependencies |
+| **create_data_type_file** / **create_aoi_file** / **create_program_file** / **create_tags_file** / **create_routine_file** / **create_rungs_file** | Build a new component from a spec as an Import Component file. `context_path` supplies the UDTs, AOIs and tags it uses |
+
+Generated files are verified against real Studio 5000 **v37 and v38** through the
+harness in [`tools/sdk/`](tools/sdk/README.md). The verified outputs are kept as golden
+test fixtures, so the test suite itself doesn't need Windows or Rockwell software.
+
 ## Suggested LLM workflow
 
 1. **Explore the project:** `list_l5x_files` → `project_overview`
@@ -306,7 +354,7 @@ including component exports (AOI, program, routine, rung, module, data type).
 ```
 l5x-mcp/
 ├── src/l5x_mcp/
-│   ├── __init__.py           # CLI entry point and arg parsing (--root, --structured-output)
+│   ├── __init__.py           # CLI entry point and arg parsing (--root, --structured-output, --read-only)
 │   ├── __main__.py           # Module runner
 │   ├── server.py             # MCPServer creation, tool registration, INSTRUCTIONS
 │   ├── registry.py           # Project discovery and caching
@@ -314,6 +362,8 @@ l5x-mcp/
 │   ├── operands.py           # Extract operand candidates from RLL rungs and ST lines
 │   ├── operand_resolver.py   # Resolve routine operands to descriptions, types and values
 │   ├── operand_paths.py      # Parse and resolve operand paths (get_tag and operands)
+│   ├── editing.py            # Write plumbing: fresh load, output_path rules, atomic write
+│   ├── specs.py              # JSON spec schemas (TypedDicts) <-> py_l5x specs
 │   └── tools/                # Tool implementations
 │       ├── project.py        # list_l5x_files, project_overview
 │       ├── tasks.py          # list_tasks, get_task
@@ -322,7 +372,11 @@ l5x-mcp/
 │       ├── datatypes.py      # list_data_types, get_data_type
 │       ├── aois.py           # list_aois, get_aoi
 │       ├── modules.py        # list_modules, get_module
-│       └── search.py         # find_references, instruction_usage
+│       ├── search.py         # find_references, instruction_usage
+│       ├── edit_tags.py      # add/remove/rename tags, set_tag_values, update_tag
+│       ├── edit_logic.py     # routines, rungs, ST lines
+│       ├── definitions.py    # get_spec; UDT/AOI/program add/replace/rename/remove; scheduling
+│       └── components.py     # export_component, create_*_file
 ├── tests/
 │   ├── fixtures/             # Test .L5X files
 │   ├── conftest.py

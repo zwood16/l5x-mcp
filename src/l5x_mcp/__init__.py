@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 ROOT_ENV_VAR = "L5X_MCP_ROOT"
 STRUCTURED_OUTPUT_ENV_VAR = "L5X_MCP_STRUCTURED_OUTPUT"
+READ_ONLY_ENV_VAR = "L5X_MCP_READ_ONLY"
 _TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
@@ -60,6 +61,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             f"Defaults to truthy {STRUCTURED_OUTPUT_ENV_VAR} (1/true/yes/on)."
         ),
     )
+    parser.add_argument(
+        "--read-only",
+        action="store_true",
+        default=_env_flag(READ_ONLY_ENV_VAR),
+        help=(
+            "Expose only the read tools; write tools (edits and component files) "
+            "are not registered. Write tools are enabled by default. "
+            f"Defaults to truthy {READ_ONLY_ENV_VAR} (1/true/yes/on)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -70,5 +81,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     from l5x_mcp.server import create_server
 
     create_server(
-        ProjectRegistry(args.root), structured_output=args.structured_output
+        ProjectRegistry(args.root),
+        structured_output=args.structured_output,
+        read_only=args.read_only,
     ).run(transport=args.transport)
