@@ -26,21 +26,79 @@ The `py_l5x` parser is automatically downloaded from its GitHub release as a whe
 
 ## Install
 
+Neither this server nor `py_l5x` is on PyPI. Install from a release wheel (simplest),
+or run from a source checkout (for development).
+
+### From a release wheel
+
+Wheels are attached to the [releases](https://github.com/zwood16/l5x-mcp/releases)
+of this repository. [uv](https://docs.astral.sh/uv/getting-started/installation/) can install them straight from the release URL. Because
+`py_l5x` isn't on PyPI either, pass its release wheel with `--with`. Without it, uv
+fails with `py-l5x was not found in the package registry`. Use a `py_l5x` version
+that meets this server's requirement (currently `py-l5x>=0.4.0`).
+
+**Global install** (puts the `l5x-mcp` command on your PATH):
+
+```bash
+uv tool install --with https://github.com/zwood16/py_l5x/releases/download/v0.4.0/py_l5x-0.4.0-py3-none-any.whl https://github.com/zwood16/l5x-mcp/releases/download/v0.2.0/l5x_mcp-0.2.0-py3-none-any.whl
+```
+
+Then register the `l5x-mcp` command with Claude Code (see
+[Claude Code configuration](#claude-code-configuration)). To upgrade, run the same
+command with the new release URLs. To reinstall the same version, add `--reinstall`.
+
+**No install:** Claude Code can also launch the server from the release wheels with
+`uvx`, which downloads them on the first launch and reuses its cached environment
+afterwards. See [Claude Code configuration](#claude-code-configuration).
+
+### From source
+
 Clone the repository and install dependencies:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/zwood16/l5x-mcp.git
 cd l5x-mcp
 uv sync
 ```
 
-**Optional: global install** (puts `l5x-mcp` command on PATH):
+Run it with `uv run --project <repo> --no-sync l5x-mcp` (see
+[Claude Code configuration](#claude-code-configuration)), or install the checkout
+globally (puts `l5x-mcp` command on PATH):
 
 ```bash
 uv tool install --editable /path/to/l5x-mcp
 ```
 
 After this, you can run `l5x-mcp` from anywhere without the `uv run` prefix.
+
+## Claude Code configuration
+
+Register the server with `claude mcp add`. Use `-s user` to make it available in every
+project: the server isn't tied to one PLC project, because it searches the directory
+Claude Code is started in (see [How .L5X files are discovered](#how-l5x-files-are-discovered)).
+Without `-s`, the server is added to the current project only (`local` scope).
+Everything after `--` is the command Claude Code runs.
+
+Pick the line that matches how you installed the server:
+
+```bash
+# Global install from a release wheel (uv tool install ..., see Install)
+claude mcp add l5x -s user -- l5x-mcp
+
+# No install: run straight from the release wheels with uvx
+claude mcp add l5x -s user -- uvx --with https://github.com/zwood16/py_l5x/releases/download/v0.4.0/py_l5x-0.4.0-py3-none-any.whl --from https://github.com/zwood16/l5x-mcp/releases/download/v0.2.0/l5x_mcp-0.2.0-py3-none-any.whl l5x-mcp
+
+# Source checkout (run `uv sync` in the checkout first)
+claude mcp add l5x -s user -- uv run --project /path/to/l5x-mcp --no-sync l5x-mcp
+```
+
+Server options go after the command, and environment variables go in `-e` options
+before `--`. For example:
+
+```bash
+claude mcp add l5x -s user -e L5X_MCP_STRUCTURED_OUTPUT=1 -- l5x-mcp --output-dir edits
+```
+
 
 ## How .L5X files are discovered
 
@@ -52,147 +110,14 @@ The server searches for `.L5X` files starting from a root directory:
 4. **Auto-reload:** The server detects file changes (mtime and size) and re-parses the project automatically
 
 The root is selected at server startup. It is the server process's working
-directory, not the directory of the currently open editor or an independently
-changing chat session. Restart the MCP server after changing its configuration.
+directory, which with Claude Code is the directory you start `claude` in. Restart
+the MCP server after changing its configuration.
 
 When launching from a source checkout, use `uv run --project <server-repo>`,
 **not** `uv --directory <server-repo> run`. `--project` selects the Python project
-and its environment without changing the working directory inherited from the
-client. `--directory` changes that directory to the server repository.
-Run `uv sync` in the server repository before using the `--no-sync` examples below.
-
-## Configure VS Code Copilot Chat
-
-Choose where to register the server:
-
-- **Across projects:** Run **MCP: Open User Configuration** from the VS Code
-  Command Palette and add the server to the user configuration.
-- **For one project:** Add the server to `.vscode/mcp.json` in your PLC project
-  (create the file if it doesn't exist).
-
-Both VS Code configuration locations use the `"servers"` top-level key. Merge
-the following entry into any existing servers rather than replacing them.
-This example uses a Windows source checkout; replace the server repository path
-with yours:
-
-```json
-{
-    "servers": {
-        "l5x-mcp": {
-            "type": "stdio",
-            "command": "uv",
-            "args": [
-                "run",
-                "--project",
-                "path/to/this/project",
-                "--no-sync",
-                "l5x-mcp"
-            ]
-        }
-    }
-}
-```
-
-VS Code's stdio server `cwd` defaults to the workspace folder when run in a
-workspace, so no `--root` or variable substitution is needed here. With no folder
-open, or if a client supplies a different working directory, use a literal
-`--root` path or `L5X_MCP_ROOT` instead.
-
-The path after `--project` is always the **server repository**, not the PLC
-project. You do not need to clone or install the server inside each PLC project.
-With user-level registration, open another PLC project in VS Code and start the
-server there; discovery uses that workspace's launch directory. This setup has
-been manually confirmed to work with VS Code chat in a separate project.
-
-`${workspaceFolder}` is a **VS Code configuration variable**, not an environment
-variable or Python feature. VS Code supports it in its own MCP configuration,
-but a different client or configuration scope may reject it or pass it literally.
-The server cannot infer an editor workspace from that literal text. If you see an
-environment-variable substitution error, remove the placeholder rather than
-moving the same placeholder into `env`. The server reports unexpanded `${...}`
-values in `--root` or `L5X_MCP_ROOT` as startup errors.
-
-**Alternative (with global install):**
-
-```json
-{
-    "servers": {
-        "l5x": {
-            "type": "stdio",
-            "command": "l5x-mcp",
-            "args": []
-        }
-    }
-}
-```
-
-### Verify the VS Code setup
-
-1. Open the PLC project folder containing your `.L5X` exports.
-2. Save the MCP configuration and restart the server from VS Code's MCP controls.
-3. Ask Copilot Chat to call `list_l5x_files`.
-4. Check that the returned `root` is your PLC project folder and that `files`
-   contains your exports.
-
-If the root points to the server repository, check for an old `--directory`
-argument. If it points to a fixed, unrelated folder, check for an explicit
-`--root` argument or an inherited `L5X_MCP_ROOT` environment variable.
-
-## Configure GitHub Copilot CLI
-
-Edit `~/.copilot/mcp-config.json` (user-level) or `.mcp.json` (repo-level).
-Use the `"mcpServers"` top-level key, not VS Code's `"servers"`. For a source
-checkout, use the same working-directory-preserving launch:
-
-```json
-{
-    "mcpServers": {
-        "l5x": {
-            "type": "local",
-            "command": "uv",
-            "args": [
-                "run",
-                "--project",
-                "path/to/this/project",
-                "--no-sync",
-                "l5x-mcp"
-            ],
-            "tools": ["*"]
-        }
-    }
-}
-```
-
-Launch Copilot CLI from your PLC project directory. With no explicit root,
-the server searches the working directory supplied by the client. This launch
-does not require `${workspaceFolder}` support. If globally installed, use
-`"command": "l5x-mcp"` with `"args": []` instead.
-
-For a fixed root independent of the client's working directory, append
-`"--root", "Z:\\path\\to\\plc-project"` to the arguments, or set a literal
-environment variable (the following example assumes a global installation):
-
-```json
-{
-    "mcpServers": {
-        "l5x": {
-            "type": "local",
-            "command": "l5x-mcp",
-            "env": { "L5X_MCP_ROOT": "path/to/plc-project" },
-            "tools": ["*"]
-        }
-    }
-}
-```
-
-**Debugging:** Run `list_l5x_files` and inspect its `root` and `files` fields.
-If `root` is not your PLC project directory, configure a literal override.
-An existing `L5X_MCP_ROOT` environment variable takes precedence over the launch
-directory; remove it if you want automatic working-directory discovery.
-Absolute tool `path` arguments still work independently of the discovery root.
-
-See the [VS Code MCP configuration reference](https://code.visualstudio.com/docs/agents/reference/mcp-configuration)
-for client configuration formats, variables, and working-directory defaults.
+and its environment without changing the working directory inherited from Claude
+Code. `--directory` changes that directory to the server repository.
+Run `uv sync` in the server repository before using the `--no-sync` examples.
 
 ## Output format
 
@@ -205,47 +130,11 @@ Add `--structured-output` to the server arguments, or set
 compact. Clients that do not use structured content can ignore it. Restart the
 server after changing this setting.
 
-VS Code (`.vscode/mcp.json` or user configuration), flag in `args`:
+With Claude Code, either as a flag or through the environment:
 
-```json
-{
-    "servers": {
-        "l5x-mcp": {
-            "type": "stdio",
-            "command": "uv",
-            "args": [
-                "run",
-                "--project",
-                "path/to/this/project",
-                "--no-sync",
-                "l5x-mcp",
-                "--structured-output"
-            ]
-        }
-    }
-}
-```
-
-GitHub Copilot CLI (`~/.copilot/mcp-config.json` or `.mcp.json`), flag set through `env`:
-
-```json
-{
-    "mcpServers": {
-        "l5x": {
-            "type": "local",
-            "command": "uv",
-            "args": [
-                "run",
-                "--project",
-                "path/to/this/project",
-                "--no-sync",
-                "l5x-mcp"
-            ],
-            "env": { "L5X_MCP_STRUCTURED_OUTPUT": "1" },
-            "tools": ["*"]
-        }
-    }
-}
+```bash
+claude mcp add l5x -s user -- l5x-mcp --structured-output
+claude mcp add l5x -s user -e L5X_MCP_STRUCTURED_OUTPUT=1 -- l5x-mcp
 ```
 
 ## Tools Reference
@@ -299,7 +188,7 @@ Rules shared by every write tool:
   name, and AOI logic, are left out. `rename_aoi` does rewrite call sites, and
   `rename_data_type` updates every tag, member and parameter of that type.
 - Alias targets must exist (in the scope, the controller tags, module I/O, or another
-  tag added in the same call). Members of tags without a value tree (MESSAGE, AXIS_*,
+  tag added in the same call). Members of tags without a value tree (MESSAGE, AXIS\_\*,
   …) can't be checked; those aliases are accepted with a `warnings` entry in the result.
 - Component files built without `context_path` carry a v37 header. Studio ignores it:
   py_l5x verified imports into v33, v35, v37 and v38.
@@ -371,6 +260,9 @@ uv run ruff format src tests
 
 Test fixtures in `tests/fixtures/` are 9 sample exports copied from the py_l5x repository,
 including component exports (AOI, program, routine, rung, module, data type).
+
+To build a wheel for a release, run `uv build`. The `.whl` and `.tar.gz` go to
+`dist/`.
 
 ### Project layout
 
