@@ -19,7 +19,7 @@ from l5x_mcp.specs import (
     from_py_spec,
     to_py_spec,
 )
-from l5x_mcp.tools.edit_tags import _find_tag, references
+from l5x_mcp.tools.edit_tags import _find_tag, check_spec_aliases, references
 from l5x_mcp.tools.programs import json_size, validate_max_chars
 
 SpecKind = Literal["data_type", "aoi", "program", "tag", "routine"]
@@ -137,7 +137,7 @@ def add_data_type(
         spec: The UDT spec.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, data_type and members (count).
@@ -168,7 +168,7 @@ def replace_data_type(
         spec: The complete new UDT spec.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, data_type and members (count).
@@ -199,7 +199,7 @@ def rename_data_type(
         new_name: New UDT name.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source and renamed {from, to}.
@@ -230,7 +230,7 @@ def remove_data_type(
         output_path: New .L5X file to write (must not be the source file).
         force: Delete even if in use.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source and removed.
@@ -266,7 +266,7 @@ def add_aoi(
         spec: The AOI spec.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, aoi and parameters (count, without
@@ -301,7 +301,7 @@ def replace_aoi(
         output_path: New .L5X file to write (must not be the source file).
         allow_signature_change: Allow changing Required parameters while called.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, aoi and parameters (count).
@@ -332,7 +332,7 @@ def rename_aoi(
         new_name: New AOI name.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, renamed {from, to} and call_sites (count
@@ -365,7 +365,7 @@ def remove_aoi(
         output_path: New .L5X file to write (must not be the source file).
         force: Delete even if in use, leaving users dangling.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source and removed.
@@ -404,13 +404,14 @@ def add_program(
         output_path: New .L5X file to write (must not be the source file).
         task: Task to schedule the program in.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, task, tags and routines (counts).
     """
     py_spec = to_py_spec("program", spec)
     edit = Edit.open(registry, path, output_path, overwrite)
+    check_spec_aliases(edit.project, py_spec.tags)
     if task is not None:
         task = lookup(edit.project.tasks, task, "Task").name
     with edit_errors(f"program {py_spec.name!r}"):
@@ -444,7 +445,7 @@ def replace_program(
         spec: The complete new program spec.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, tags and routines (counts).
@@ -452,6 +453,7 @@ def replace_program(
     py_spec = to_py_spec("program", spec)
     edit = Edit.open(registry, path, output_path, overwrite)
     py_spec.name = lookup(edit.project.programs, py_spec.name, "Program").name
+    check_spec_aliases(edit.project, py_spec.tags)
     with edit_errors(f"program {py_spec.name!r}"):
         edit.project.programs.replace(py_spec)
     return edit.save(
@@ -482,7 +484,7 @@ def rename_program(
         new_name: New program name.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, renamed {from, to} and references.
@@ -513,7 +515,7 @@ def remove_program(
         name: Program name.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source and removed.
@@ -545,7 +547,7 @@ def schedule_program(
         output_path: New .L5X file to write (must not be the source file).
         task: Target task name, or null to unschedule.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, previous_task and task.
@@ -590,7 +592,7 @@ def set_description(
         output_path: New .L5X file to write (must not be the source file).
         program: Program containing the routine (kind="routine" only).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, kind and name.

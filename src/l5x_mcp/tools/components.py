@@ -28,7 +28,7 @@ from l5x_mcp.specs import (
     TagSpecDict,
     to_py_spec,
 )
-from l5x_mcp.tools.edit_tags import scope_collection
+from l5x_mcp.tools.edit_tags import check_spec_aliases, scope_collection
 
 #: An empty v37 project used when a component is created without context.
 _BLANK_PROJECT = """\
@@ -80,7 +80,7 @@ def _write(
         source=registry.resolve(source) if source else None,
         overwrite=overwrite,
     )
-    write_project(component, out)
+    write_project(registry, component, out)
     result: dict[str, Any] = {"file": registry.relpath(out)}
     if source:
         result["source"] = registry.relpath(registry.resolve(source))
@@ -114,6 +114,21 @@ def _context_summary(component: Project) -> dict[str, list[str]]:
     if modules:
         out["modules"] = modules
     return out
+
+
+def _check_aliases(
+    project: Project, specs: list[Any], context_path: str | None
+) -> None:
+    """Check alias targets of new tags against the same list and the context."""
+    try:
+        check_spec_aliases(project, specs)
+    except L5XError as exc:
+        if context_path:
+            raise
+        raise L5XError(
+            f"{str(exc).rstrip('.')}. Pass context_path (a project that has "
+            "the target) or add the target to the same tags list"
+        ) from exc
 
 
 def _check_free(collection: Any, name: str, kind: str) -> None:
@@ -164,7 +179,7 @@ def export_component(
         routine: Routine for rungs.
         rungs: Rung numbers for kind="rungs".
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, target_type, targets and context (the
@@ -239,7 +254,7 @@ def create_data_type_file(
         spec: The UDT spec.
         output_path: New .L5X file to write (inside the server root).
         context_path: Optional project whose UDTs/AOIs the spec may use.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, target_type, targets and context.
@@ -279,7 +294,7 @@ def create_aoi_file(
         spec: The AOI spec.
         output_path: New .L5X file to write (inside the server root).
         context_path: Optional project whose UDTs/AOIs the spec may use.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, target_type, targets and context.
@@ -319,7 +334,7 @@ def create_program_file(
         spec: The program spec.
         output_path: New .L5X file to write (inside the server root).
         context_path: Optional project whose UDTs/AOIs/tags the program uses.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, target_type, targets and context.
@@ -327,6 +342,7 @@ def create_program_file(
     py_spec = to_py_spec("program", spec)
     project = _context(registry, context_path)
     _check_free(project.programs, py_spec.name, "Program")
+    _check_aliases(project, py_spec.tags, context_path)
     with edit_errors(f"program {py_spec.name!r}"):
         component = project.export(py_spec)
     return _write(
@@ -357,7 +373,7 @@ def create_tags_file(
         tags: Tag specs.
         output_path: New .L5X file to write (inside the server root).
         context_path: Optional project whose UDTs/AOIs the tags use.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, target_type, targets and context.
@@ -368,6 +384,7 @@ def create_tags_file(
     project = _context(registry, context_path)
     for spec in specs:
         _check_free(project.controller_tags, spec.name, "Controller tag")
+    _check_aliases(project, specs, context_path)
     with edit_errors("tags"):
         component = project.export(specs)
     return _write(
@@ -410,7 +427,7 @@ def create_routine_file(
         routine: The routine spec (name, type, rungs or lines, description).
         output_path: New .L5X file to write (inside the server root).
         context_path: Optional project with the tags/types the logic uses.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, target_type, targets and context.
@@ -463,7 +480,7 @@ def create_rungs_file(
         rungs: Rungs in order ([{text, comment?}]).
         output_path: New .L5X file to write (inside the server root).
         context_path: Optional project with the tags/types the rungs use.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, target_type, targets (rung count) and context.

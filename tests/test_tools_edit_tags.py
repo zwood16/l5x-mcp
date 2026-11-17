@@ -4,6 +4,7 @@ import pytest
 from py_l5x import AliasTag, load
 
 from l5x_mcp.registry import ItemNotFoundError, L5XError
+from l5x_mcp.tools.definitions import get_spec
 from l5x_mcp.tools.edit_tags import (
     add_tags,
     remove_tags,
@@ -125,6 +126,137 @@ class TestAddTags:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
+
+
+class TestAddTagsValidation:
+    def _add(self, editable, tags, **kw):
+        return add_tags(editable, tags=tags, output_path="out.L5X", path=EXAMPLE, **kw)
+
+    def _refused(self, editable, tags, match, **kw):
+        with pytest.raises(L5XError, match=match):
+            self._add(editable, tags, **kw)
+        assert not (editable.root / "out.L5X").exists()
+
+    def test_invalid_metadata_key_is_refused(self, editable):
+        self._refused(
+            editable,
+            [{"name": "T1", "data_type": "DINT", "metadata": {"bad name": "x"}}],
+            "not a valid XML attribute name",
+        )
+
+    def test_clashing_metadata_key_is_refused(self, editable):
+        self._refused(
+            editable,
+            [{"name": "T1", "data_type": "DINT", "metadata": {"DataType": "NOPE"}}],
+            "DataType",
+        )
+
+    def test_valid_metadata_is_written(self, editable):
+        self._add(
+            editable,
+            [{"name": "T1", "data_type": "DINT", "metadata": {"OpcUaAccess": "None"}}],
+        )
+        text = (editable.root / "out.L5X").read_text()
+        assert '<Tag Name="T1"' in text
+        line = next(x for x in text.splitlines() if x.startswith('<Tag Name="T1"'))
+        assert 'OpcUaAccess="None"' in line
+
+    def test_alias_keeps_radix_and_external_access(self, editable):
+        self._add(
+            editable,
+            [
+                {
+                    "name": "Al",
+                    "alias_for": "consumed_tag",
+                    "radix": "Hex",
+                    "external_access": "Read Only",
+                    "description": "d",
+                }
+            ],
+        )
+        text = (editable.root / "out.L5X").read_text()
+        line = next(x for x in text.splitlines() if x.startswith('<Tag Name="Al"'))
+        assert 'Radix="Hex"' in line
+        assert 'ExternalAccess="Read Only"' in line
+        tag = _read(editable, "out.L5X").controller_tags["Al"]
+        assert tag.alias_for == "consumed_tag"
+
+    @pytest.mark.parametrize(
+        ("extra", "match"),
+        [
+            ({"constant": True}, "constant"),
+            ({"value": 1}, "value"),
+            ({"operand_comments": {".1": "x"}}, "operand comments"),
+            ({"data_type": "DINT"}, "not both"),
+        ],
+    )
+    def test_alias_rejects_base_only_fields(self, editable, extra, match):
+        self._refused(
+            editable,
+            [{"name": "Al", "alias_for": "consumed_tag", **extra}],
+            match,
+        )
+
+    def test_alias_to_missing_tag_is_refused(self, editable):
+        self._refused(editable, [{"name": "Al", "alias_for": "NoSuchTag"}], "NoSuchTag")
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "consumed_tag",
+            "consumed_tag.3",
+            "ALLOWABLE_ALARMS[2]",
+            "Local:1:I.Pt01.Data",
+        ],
+    )
+    def test_alias_to_existing_targets_is_accepted(self, editable, target):
+        self._add(editable, [{"name": "Al", "alias_for": target}])
+        tag = _read(editable, "out.L5X").controller_tags["Al"]
+        assert tag.alias_for == target
+
+    def test_alias_to_bad_member_is_refused(self, editable):
+        self._refused(
+            editable,
+            [{"name": "Al", "alias_for": "ALLOWABLE_ALARMS[1].nope"}],
+            "Member 'nope'",
+        )
+
+    def test_program_alias_to_controller_tag_is_accepted(self, editable):
+        self._add(
+            editable,
+            [{"name": "Al", "alias_for": "consumed_tag"}],
+            scope="MainProgram",
+        )
+        program = _read(editable, "out.L5X").programs["MainProgram"]
+        assert program.tags["Al"].alias_for == "consumed_tag"
+
+    def test_program_alias_to_program_tag_is_accepted(self, editable):
+        self._add(
+            editable,
+            [{"name": "Al", "alias_for": "an_input_param"}],
+            scope="MainProgram",
+        )
+
+    def test_forward_reference_within_one_call_is_accepted(self, editable):
+        self._add(
+            editable,
+            [
+                {"name": "Al", "alias_for": "NewBase"},
+                {"name": "Al2", "alias_for": "NewArr[1]"},
+                {"name": "NewBase", "data_type": "DINT"},
+                {"name": "NewArr", "data_type": "DINT", "dimensions": 4},
+            ],
+        )
+        tags = _read(editable, "out.L5X").controller_tags
+        assert tags["Al"].alias_for == "NewBase"
+
+    def test_get_spec_of_an_alias_round_trips(self, editable):
+        spec = get_spec(editable, kind="tag", name="an_alias_tag", path=EXAMPLE)
+        spec = spec.get("spec", spec)
+        spec = {**spec, "name": "CopiedAlias"}
+        self._add(editable, [spec], scope="MainProgram")
+        program = _read(editable, "out.L5X").programs["MainProgram"]
+        assert program.tags["CopiedAlias"].alias_for == "Local:1:I.Pt01.Data"
 
 
 class TestRemoveTags:

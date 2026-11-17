@@ -14,6 +14,7 @@ from l5x_mcp.editing import (
     write_project,
 )
 from l5x_mcp.registry import L5XError
+from l5x_mcp.tools.components import create_tags_file
 from l5x_mcp.tools.edit_tags import add_tags
 
 EXAMPLE = "example.L5X"
@@ -46,8 +47,8 @@ class TestResolveOutput:
         (editable.root / "taken.L5X").write_text("x")
         with pytest.raises(L5XError, match="overwrite=true"):
             resolve_output(editable, "taken.L5X")
-        out = resolve_output(editable, "taken.L5X", overwrite=True)
-        assert out == editable.root / "taken.L5X"
+        with pytest.raises(L5XError, match="not written by a write tool"):
+            resolve_output(editable, "taken.L5X", overwrite=True)
 
     def test_rejects_directory(self, editable):
         (editable.root / "folder.L5X").mkdir()
@@ -100,12 +101,57 @@ class TestEdit:
         assert (editable.root / "saved.L5X").exists()
 
 
+class TestOverwriteOwnership:
+    """overwrite=true only replaces unchanged files this server wrote."""
+
+    def _add(self, editable, out, **kw):
+        return add_tags(
+            editable,
+            tags=[{"name": "N1", "data_type": "DINT"}],
+            output_path=out,
+            path=EXAMPLE,
+            **kw,
+        )
+
+    def test_own_output_can_be_overwritten(self, editable):
+        self._add(editable, "out.L5X")
+        self._add(editable, "out.L5X", overwrite=True)
+
+    def test_changed_own_output_cannot_be_overwritten(self, editable):
+        self._add(editable, "out.L5X")
+        out = editable.root / "out.L5X"
+        with out.open("ab") as f:
+            f.write(b"\n")
+        with pytest.raises(L5XError, match="not written by a write tool"):
+            self._add(editable, "out.L5X", overwrite=True)
+
+    def test_touched_own_output_cannot_be_overwritten(self, editable):
+        self._add(editable, "out.L5X")
+        out = editable.root / "out.L5X"
+        st = out.stat()
+        os.utime(out, ns=(st.st_atime_ns, st.st_mtime_ns + 10**9))
+        with pytest.raises(L5XError, match="not written by a write tool"):
+            self._add(editable, "out.L5X", overwrite=True)
+
+    def test_other_project_is_never_overwritten(self, editable):
+        other = editable.root / "simple_example.L5X"
+        before = other.read_bytes()
+        with pytest.raises(L5XError, match="not written by a write tool"):
+            self._add(editable, "simple_example.L5X", overwrite=True)
+        assert other.read_bytes() == before
+
+    def test_component_output_can_be_overwritten(self, editable):
+        spec = [{"name": "CT", "data_type": "DINT"}]
+        create_tags_file(editable, tags=spec, output_path="c.L5X")
+        create_tags_file(editable, tags=spec, output_path="c.L5X", overwrite=True)
+
+
 class TestWriteProject:
     """Atomic write semantics."""
 
     def test_written_file_gets_umask_permissions(self, editable):
         out = editable.root / "perm.L5X"
-        write_project(load(str(editable.root / EXAMPLE)), out)
+        write_project(editable, load(str(editable.root / EXAMPLE)), out)
 
         umask = os.umask(0)
         os.umask(umask)
@@ -119,13 +165,15 @@ class TestWriteProject:
 
         out = editable.root / "never.L5X"
         with pytest.raises(OSError, match="disk full"):
-            write_project(Broken(), out)
+            write_project(editable, Broken(), out)
 
         assert not out.exists()
         assert list(editable.root.glob(".*.tmp")) == []
 
     def test_leaves_no_temp_files_after_success(self, editable):
-        write_project(load(str(editable.root / EXAMPLE)), editable.root / "ok.L5X")
+        write_project(
+            editable, load(str(editable.root / EXAMPLE)), editable.root / "ok.L5X"
+        )
         assert list(editable.root.glob(".*.tmp")) == []
 
 

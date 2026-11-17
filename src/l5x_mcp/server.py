@@ -72,8 +72,10 @@ _EDIT_SECTION = """
 Editing (write tools are enabled):
 - Each write tool loads the project at path, applies one change and writes a NEW .L5X
   to output_path. The source file is never modified. output_path is required, must be
-  a new .L5X inside the server root, and overwrite=true is needed to replace an
-  existing output. To chain several edits, pass the previous output as the next path.
+  a new .L5X inside the server root. overwrite=true only replaces a file a write
+  tool wrote earlier in this server session (and that is unchanged since); other
+  existing files are never replaced. To chain several edits, pass the previous
+  output as the next path.
 - Replacing a UDT, AOI or program: get_spec returns the object as a spec in the form
   the add/replace tools accept; change that spec, then call the replace_* tool.
 - create_*_file and export_component write Studio Import Component files; no project

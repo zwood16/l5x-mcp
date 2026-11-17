@@ -6,9 +6,11 @@ the change with py_l5x, and write the result to a separate ``output_path``.
 The source file is never modified.
 
 Output paths are confined to the registry root, must end in ``.L5X``, must
-differ from the source, and refuse to replace an existing file unless the
-caller passes ``overwrite=True``. Files are written atomically (temp file plus
-rename) so a reader never sees a half-written project.
+differ from the source, and refuse to replace an existing file. With
+``overwrite=True`` only a file this server process wrote earlier (and that has
+not changed since) may be replaced, so other projects in the root can never be
+clobbered. Files are written atomically (temp file plus rename) so a reader
+never sees a half-written project.
 
 py_l5x reports bad edits with ``ValueError``, ``KeyError``, ``TypeError`` and
 ``IndexError``. :func:`edit_errors` turns those into :class:`L5XError` so the
@@ -70,15 +72,18 @@ def resolve_output(
         registry: Registry whose root confines the output.
         output_path: Absolute or root-relative destination path.
         source: The project being edited; the output may not be this file.
-        overwrite: Allow replacing an existing file.
+        overwrite: Allow replacing an existing file, but only one that this
+            server wrote earlier in this session and that is unchanged since
+            (``registry.is_own_output``).
 
     Returns:
         The resolved absolute destination path.
 
     Raises:
         L5XError: If the path is empty, escapes the root, is not ``.L5X``, is
-            the source file, names a directory, or exists without
-            ``overwrite``.
+            the source file, names a directory, exists without ``overwrite``,
+            or exists with ``overwrite`` but is not an unchanged output of
+            this server.
     """
     if not output_path or not output_path.strip():
         raise L5XError("output_path is required")
@@ -106,6 +111,12 @@ def resolve_output(
             f"{registry.relpath(out)} already exists. Pass overwrite=true to "
             "replace it, or choose another output_path."
         )
+    if out.exists() and not registry.is_own_output(out):
+        raise L5XError(
+            f"{registry.relpath(out)} exists and was not written by a write tool "
+            "in this server session (or it changed since). overwrite only "
+            "replaces this session's own outputs; choose a new output_path."
+        )
     return out
 
 
@@ -129,7 +140,7 @@ def load_fresh(registry: ProjectRegistry, path: str | None) -> tuple[Path, Proje
         raise L5XError(f"Failed to parse L5X file {source}: {exc}") from exc
 
 
-def write_project(project: Project, out: Path) -> None:
+def write_project(registry: ProjectRegistry, project: Project, out: Path) -> None:
     """Write a project atomically.
 
     The temp file is created by py_l5x (a normal ``open``), not with
@@ -137,6 +148,7 @@ def write_project(project: Project, out: Path) -> None:
     0600.
 
     Args:
+        registry: Registry that records the written file as this server's output.
         project: The project (or component export) to write.
         out: Destination path; parent directories are created.
     """
@@ -145,6 +157,7 @@ def write_project(project: Project, out: Path) -> None:
     try:
         project.write(str(tmp))
         os.replace(tmp, out)
+        registry.record_output(out)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
@@ -220,7 +233,7 @@ class Edit:
             registry: The project registry.
             path: Source project path (``None`` for auto-discovery).
             output_path: Destination path.
-            overwrite: Allow replacing an existing destination file.
+            overwrite: Allow replacing a destination this server wrote earlier.
 
         Returns:
             The edit session.
@@ -239,7 +252,7 @@ class Edit:
         Returns:
             ``{"file": <output>, "source": <input>, **summary}``.
         """
-        write_project(self.project, self.out)
+        write_project(self.registry, self.project, self.out)
         return {
             "file": self.registry.relpath(self.out),
             "source": self.registry.relpath(self.source),

@@ -243,6 +243,45 @@ class TestCreateComponents:
         assert "produced_tag" in component.controller_tags
         assert "produced_tag" in result["context"]["tags"]
 
+    def test_create_tags_alias_to_tag_in_same_list(self, editable):
+        create_tags_file(
+            editable,
+            tags=[
+                {"name": "CompAlias", "alias_for": "CompTag"},
+                {"name": "CompTag", "data_type": "DINT"},
+            ],
+            output_path="tags.L5X",
+        )
+        assert "CompAlias" in _load(editable, "tags.L5X").controller_tags
+
+    def test_create_tags_alias_to_missing_tag_needs_context(self, editable):
+        with pytest.raises(L5XError, match="context_path"):
+            create_tags_file(
+                editable,
+                tags=[{"name": "CompAlias", "alias_for": "produced_tag"}],
+                output_path="tags.L5X",
+            )
+        assert not (editable.root / "tags.L5X").exists()
+
+    def test_create_tags_alias_to_missing_tag_in_context_is_refused(self, editable):
+        with pytest.raises(L5XError, match="NoSuchTag"):
+            create_tags_file(
+                editable,
+                tags=[{"name": "CompAlias", "alias_for": "NoSuchTag"}],
+                context_path=EXAMPLE,
+                output_path="tags.L5X",
+            )
+
+    def test_create_program_file_alias_to_missing_tag_is_refused(self, editable):
+        spec = {
+            "name": "NewProg",
+            "tags": [{"name": "Al", "alias_for": "NoSuchTag"}],
+        }
+        with pytest.raises(L5XError, match="NoSuchTag"):
+            create_program_file(
+                editable, spec=spec, context_path=EXAMPLE, output_path="p.L5X"
+            )
+
     def test_create_tags_rejects_unknown_type(self, editable):
         with pytest.raises(L5XError, match="NOTATYPE"):
             create_tags_file(

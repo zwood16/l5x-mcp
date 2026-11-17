@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from py_l5x import AliasTag, ModuleTagRef, Tag
+from py_l5x import AliasTag, ModuleTagRef, Tag, build_tag
 from py_l5x.parsers.project import Project
 from py_l5x.parsers.tag import TagsCollection
 
@@ -108,6 +108,13 @@ def add_tags(
     rules and must be unique (case-insensitive) in the scope. All tags are
     added or none are.
 
+    Alias tags take name, alias_for, description, radix and external_access
+    (Studio ignores external_access on aliases); no data_type, value,
+    dimensions, constant or operand comments. The alias target (including any
+    member, bit or index) must exist: in the scope, in the controller tags
+    (for a program alias), as a module I/O tag, or as another tag in the same
+    call.
+
     Args:
         registry: ProjectRegistry to load from.
         tags: Tag specs to add, in order.
@@ -115,7 +122,7 @@ def add_tags(
             be the source file).
         scope: "controller" (default) or a program name.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file (written), source, scope and added (tag names).
@@ -124,37 +131,103 @@ def add_tags(
         raise L5XError("tags must contain at least one tag spec")
     edit = Edit.open(registry, path, output_path, overwrite)
     scope_name, collection = scope_collection(edit.project, scope)
-    added = []
-    for data in tags:
-        spec = to_py_spec("tag", data)
+    specs = [to_py_spec("tag", data) for data in tags]
+    for spec in specs:
+        if not spec.alias_for:
+            if not spec.data_type:
+                raise L5XError(
+                    f"tag {spec.name!r}: data_type (or alias_for) is required"
+                )
+            check_data_type(edit.project, spec.data_type)
         with edit_errors(f"tag {spec.name!r}"):
-            if spec.alias_for:
-                if spec.data_type:
-                    raise L5XError("give either data_type or alias_for, not both")
-                tag = collection.add_alias(
-                    spec.name, spec.alias_for, description=spec.description
-                )
-            else:
-                if not spec.data_type:
-                    raise L5XError("data_type (or alias_for) is required")
-                check_data_type(edit.project, spec.data_type)
-                tag = collection.add(
-                    spec.name,
-                    spec.data_type,
-                    dimensions=spec.dimensions,
-                    description=spec.description or None,
-                    radix=spec.radix,
-                    external_access=spec.external_access,
-                    constant=spec.constant,
-                    value=spec.value,
-                )
-            _apply_operand_metadata(
-                tag, spec.operand_comments or {}, spec.operand_metadata or {}
+            _add_tag_spec(collection, spec)
+    batch = {spec.name.lower() for spec in specs}
+    for spec in specs:
+        if spec.alias_for:  # after all adds: forward references are allowed
+            check_alias_target(
+                edit.project, spec.alias_for, scope_name, spec.name, batch
             )
-            for key, text in (spec.metadata or {}).items():
-                tag._element.set(key, text)
-        added.append(spec.name)
-    return edit.save({"scope": scope_name, "added": added})
+    return edit.save({"scope": scope_name, "added": [spec.name for spec in specs]})
+
+
+def check_spec_aliases(
+    project: Project, tags: list[Any], scope: str = "controller"
+) -> None:
+    """Check the alias targets of tag specs that are not in the project yet.
+
+    A target is accepted if its base is a tag of the same spec list, a
+    controller tag, or a module I/O tag of ``project``.
+
+    Args:
+        project: The project to resolve against (edited or context project).
+        tags: py_l5x ``TagSpec`` objects.
+        scope: Scope for resolution, normally ``"controller"``.
+
+    Raises:
+        L5XError: If an alias target cannot be found.
+    """
+    batch = {t.name.lower() for t in tags}
+    for tag in tags:
+        if tag.alias_for:
+            check_alias_target(project, tag.alias_for, scope, tag.name, batch)
+
+
+def _add_tag_spec(collection: TagsCollection, spec: Any) -> Any:
+    """Add a tag from a ``TagSpec`` (validated metadata, aliases keep radix).
+
+    Mirrors ``TagsCollection.add``; this should become a public py_l5x API
+    (``TagsCollection.add_spec``) and then be replaced by it.
+
+    Args:
+        collection: The collection to add to.
+        spec: The py_l5x ``TagSpec``.
+
+    Returns:
+        The new tag.
+    """
+    collection._check_new_name(spec.name)
+    return collection._append(build_tag(spec, collection._registry))
+
+
+def check_alias_target(
+    project: Project,
+    alias_for: str,
+    scope: str,
+    alias_name: str | None = None,
+    batch: set[str] | frozenset[str] = frozenset(),
+) -> None:
+    """Check that an alias target exists, including members, bits and indexes.
+
+    Args:
+        project: The project to resolve against.
+        alias_for: The alias's target operand.
+        scope: ``"controller"`` or a program name (program tags are searched
+            first, then controller tags). Module I/O names always resolve.
+        alias_name: The alias's name, for the error message.
+        batch: Lower-case names of tags being added together with the alias;
+            a target whose base is one of them is accepted without walking
+            its path (such tags may have no data yet).
+
+    Raises:
+        L5XError: If the target cannot be found.
+    """
+    label = f"alias {alias_name!r}: " if alias_name else "alias: "
+    parsed = parse_operand(alias_for)
+    if parsed.program is None and parsed.base.lower() in batch:
+        return
+    use = scope
+    if parsed.program is None and scope != "controller" and ":" not in parsed.base:
+        program = lookup(project.programs, scope, "Program")
+        if not any(k.lower() == parsed.base.lower() for k in program.tags):
+            use = "controller"
+    try:
+        resolved = resolve_tag(
+            project, alias_for, scope=None if parsed.program else use
+        )
+    except L5XError as exc:
+        raise L5XError(f"{label}target {alias_for!r} not found: {exc}") from exc
+    if resolved.alias_error:
+        raise L5XError(f"{label}target {alias_for!r} not found: {resolved.alias_error}")
 
 
 def _apply_operand_metadata(
@@ -199,7 +272,7 @@ def remove_tags(
         scope: None (controller first, then programs), "controller", or a
             program name.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, removed ([{name, scope}]) and references
@@ -249,7 +322,7 @@ def rename_tag(
         scope: None (controller first, then programs), "controller", or a
             program name.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, scope, renamed {from, to} and references (logic
@@ -296,7 +369,7 @@ def set_tag_values(
         scope: None (controller first, then programs), "controller", or a
             program name; "\\Program.tag" operands select a program directly.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source and set ({operand: new value as stored}).
@@ -374,7 +447,7 @@ def update_tag(
         operand_comments: {operand: comment or null}.
         operand_metadata: {operand: {key: text or null}}.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, scope, tag and changed (list of what changed).

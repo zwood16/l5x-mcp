@@ -98,6 +98,37 @@ class ProjectRegistry:
 
         self._cache: dict[Path, tuple[int, int, Project]] = {}
         self._lock = threading.Lock()
+        self._outputs: dict[Path, tuple[int, int]] = {}
+
+    def record_output(self, path: Path) -> None:
+        """Remember a file this server just wrote (see :meth:`is_own_output`).
+
+        Args:
+            path: The written file.
+        """
+        path = Path(path).resolve()
+        stat = path.stat()
+        with self._lock:
+            self._outputs[path] = (stat.st_mtime_ns, stat.st_size)
+
+    def is_own_output(self, path: Path) -> bool:
+        """Return whether ``path`` was written by this server and is unchanged.
+
+        Args:
+            path: The file to check.
+
+        Returns:
+            ``True`` only if the file was recorded by :meth:`record_output` and
+            its mtime and size still match; ``False`` for a missing file.
+        """
+        path = Path(path).resolve()
+        with self._lock:
+            recorded = self._outputs.get(path)
+        try:
+            stat = path.stat()
+        except OSError:
+            return False
+        return recorded == (stat.st_mtime_ns, stat.st_size)
 
     def discover(self, subdir: str | None = None) -> list[Path]:
         """Recursively discover .L5X files under root directory.

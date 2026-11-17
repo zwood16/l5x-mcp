@@ -386,6 +386,24 @@ class TestPrograms:
                 path=EXAMPLE,
             )
 
+    def test_add_with_alias_to_missing_tag_is_refused(self, editable):
+        spec = {**self.PROGRAM_SPEC, "tags": [{"name": "Al", "alias_for": "NoTag"}]}
+        with pytest.raises(L5XError, match="NoTag"):
+            add_program(editable, spec=spec, output_path="out.L5X", path=EXAMPLE)
+        assert not (editable.root / "out.L5X").exists()
+
+    def test_add_with_alias_to_controller_or_same_spec_tag(self, editable):
+        spec = {
+            **self.PROGRAM_SPEC,
+            "tags": [
+                {"name": "A1", "alias_for": "consumed_tag"},
+                {"name": "A2", "alias_for": "Base"},
+                {"name": "Base", "data_type": "DINT"},
+            ],
+        }
+        add_program(editable, spec=spec, output_path="out.L5X", path=EXAMPLE)
+        assert "A2" in _read(editable, "out.L5X").programs["NewProg"].tags
+
     def test_replace_removes_tags_not_in_the_spec(self, editable):
         add_program(
             editable, spec=self.PROGRAM_SPEC, output_path="added.L5X", path=EXAMPLE

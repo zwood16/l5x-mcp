@@ -70,7 +70,7 @@ def add_routine(
         rungs: RLL rungs in order.
         lines: ST lines in order.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, routine, type and rungs/lines count.
@@ -112,7 +112,7 @@ def remove_routine(
         name: Routine name.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, removed and references (when any).
@@ -149,7 +149,7 @@ def rename_routine(
         new_name: New routine name.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, renamed {from, to} and references.
@@ -195,7 +195,7 @@ def add_rungs(
         output_path: New .L5X file to write (must not be the source file).
         index: Insert position (0 = first); omit to append.
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, routine, inserted (rung numbers) and
@@ -246,7 +246,7 @@ def replace_rung(
         text: New neutral rung text.
         comment: New rung comment ("" removes it).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, routine, rung, text and comment.
@@ -297,7 +297,7 @@ def remove_rungs(
         numbers: Rung numbers to remove.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, routine, removed and rung_count.
@@ -347,7 +347,7 @@ def set_st_lines(
         lines: The new ST source lines.
         output_path: New .L5X file to write (must not be the source file).
         path: Source .L5X file (None for auto-discovery). Never modified.
-        overwrite: Replace output_path if it already exists.
+        overwrite: Replace output_path if this server wrote it earlier in this session.
 
     Returns:
         Dict with file, source, program, routine and line_count.

@@ -15,6 +15,7 @@ two, so specs returned by ``get_spec`` can be edited and passed straight back.
 from __future__ import annotations
 
 import dataclasses
+import re
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from py_l5x import AOISpec, DataTypeSpec, ProgramSpec, RoutineSpec, RungSpec, TagSpec
@@ -23,6 +24,8 @@ from pydantic import ConfigDict, Field, with_config
 from l5x_mcp.registry import L5XError
 
 _FORBID = ConfigDict(extra="forbid")
+
+_XML_ATTR = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 
 Access = Literal["Read/Write", "Read Only", "None"]
 Limit = str | int | float
@@ -218,9 +221,22 @@ class TagSpecDict(TypedDict):
     ]
     radix: NotRequired[str | None]
     external_access: NotRequired[Access | None]
-    constant: NotRequired[bool | None]
+    constant: NotRequired[
+        Annotated[
+            bool | None,
+            Field(description="Constant tag (not allowed on alias tags)."),
+        ]
+    ]
     alias_for: NotRequired[
-        Annotated[str | None, Field(description="Target operand of an alias tag.")]
+        Annotated[
+            str | None,
+            Field(
+                description="Target operand of an alias tag; it must exist "
+                "(controller tag, module I/O tag, or another tag in the same "
+                "call). Aliases take only name, description, radix and "
+                "external_access (ignored by Studio)."
+            ),
+        ]
     ]
     operand_comments: NotRequired[
         Annotated[
@@ -276,8 +292,39 @@ def _routine(data: dict[str, Any]) -> RoutineSpec:
     return RoutineSpec(**fields)
 
 
+def _check_metadata(owner: str, metadata: dict[str, str] | None) -> None:
+    for key in metadata or {}:
+        if not _XML_ATTR.match(str(key)):
+            raise L5XError(
+                f"Invalid {owner}: metadata key {key!r} is not a valid XML "
+                "attribute name"
+            )
+
+
+def _check_tag(spec: TagSpec) -> None:
+    owner = f"tag spec {spec.name!r}"
+    _check_metadata(owner, spec.metadata)
+    if not spec.alias_for:
+        return
+    if spec.data_type:
+        raise L5XError(f"Invalid {owner}: give either data_type or alias_for, not both")
+    if spec.constant is not None:
+        raise L5XError(
+            f"Invalid {owner}: constant is not allowed on alias tags "
+            "(Studio drops Constant on aliases)"
+        )
+    if spec.operand_comments or spec.operand_metadata:
+        raise L5XError(
+            f"Invalid {owner}: alias tags have no operand comments or metadata"
+        )
+    if spec.value is not None or spec.dimensions is not None:
+        raise L5XError(f"Invalid {owner}: alias tags take no value or dimensions")
+
+
 def _tag(data: dict[str, Any]) -> TagSpec:
-    return TagSpec.from_dict(dict(data))
+    spec = TagSpec.from_dict(dict(data))
+    _check_tag(spec)
+    return spec
 
 
 def to_py_spec(kind: str, data: dict[str, Any]) -> Any:
@@ -307,19 +354,24 @@ def to_py_spec(kind: str, data: dict[str, Any]) -> Any:
             routines = fields.pop("routines", [])
             spec = AOISpec.from_dict({**fields, "routines": []})
             spec.routines = [_routine(r) for r in routines]
+            _check_metadata(f"AOI spec {spec.name!r}", spec.metadata)
             return spec
         if kind == "program":
             fields = dict(data)
             if "program_class" in fields:
                 fields["class_"] = fields.pop("program_class")
-            return ProgramSpec(
+            spec = ProgramSpec(
                 **{
                     **fields,
                     "tags": [_tag(t) for t in fields.get("tags") or []],
                     "routines": [_routine(r) for r in fields.get("routines") or []],
                 }
             )
-    except (TypeError, KeyError) as exc:
+            _check_metadata(f"program spec {spec.name!r}", spec.metadata)
+            return spec
+    except L5XError:
+        raise
+    except (TypeError, KeyError, ValueError) as exc:
         raise L5XError(f"Invalid {kind} spec: {exc}") from exc
     raise ValueError(f"unknown spec kind {kind!r}")
 
