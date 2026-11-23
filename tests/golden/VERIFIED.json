@@ -8,7 +8,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_data_type.L5X": {
@@ -18,7 +18,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_aoi.L5X": {
@@ -28,7 +28,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_aoi_udt.L5X": {
@@ -38,7 +38,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_program.L5X": {
@@ -48,7 +48,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_tags.L5X": {
@@ -58,7 +58,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_routine.L5X": {
@@ -68,7 +68,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_rungs.L5X": {
@@ -78,7 +78,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_routine_tags.L5X": {
@@ -88,7 +88,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_rungs_tags.L5X": {
@@ -98,7 +98,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "comp_tags_program.L5X": {
@@ -108,7 +108,27 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
+      "build": "ok"
+    },
+    "comp_tags_protected.L5X": {
+      "case": "comp_tags_protected",
+      "sha256": "d3bbb3056ce8b879428bfde3146ad9528a4a5caf3eecb599d5dc8bdfb4c18811",
+      "logix": {
+        "37": "37.00",
+        "38": "38.02"
+      },
+      "verified": "2026-11-23",
+      "build": "ok"
+    },
+    "comp_routine_protected_tags.L5X": {
+      "case": "comp_routine_protected_tags",
+      "sha256": "e136176db7bb76894a680289822d13b1152d31aa5f3c864a8a282f63e7121864",
+      "logix": {
+        "37": "37.00",
+        "38": "38.02"
+      },
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_data_type.L5X": {
@@ -118,7 +138,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_aoi.L5X": {
@@ -128,7 +148,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_program.L5X": {
@@ -138,7 +158,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_tags.L5X": {
@@ -148,7 +168,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_routine.L5X": {
@@ -158,7 +178,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_rungs.L5X": {
@@ -168,7 +188,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_routine_protected.L5X": {
@@ -178,7 +198,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     },
     "exp_program_protected.L5X": {
@@ -188,7 +208,7 @@
         "37": "37.00",
         "38": "38.02"
       },
-      "verified": "2026-11-22",
+      "verified": "2026-11-23",
       "build": "ok"
     }
   }

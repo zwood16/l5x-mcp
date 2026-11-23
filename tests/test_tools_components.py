@@ -612,3 +612,106 @@ class TestProtectedComponents:
             path=EXAMPLE,
         )
         assert "warnings" not in result
+
+
+class TestCopyFromAndProtectedTags:
+    def test_program_tags_file_carries_copied_and_set_data(self, editable):
+        create_tags_file(
+            editable,
+            program="AnotherProgram",
+            tags=[
+                {
+                    "name": "protValue",
+                    "data_type": "SeqCtrl_Protected",
+                    "value": {"startupStep": 4321, "mode": True},
+                },
+                {
+                    "name": "protCopy",
+                    "copy_from": "seqCtrl_Protected_Instance",
+                    "value": {"startupStep": 1234},
+                },
+            ],
+            output_path="t.L5X",
+            context_path=EXAMPLE,
+        )
+
+        tags = _load(editable, OUT + "t.L5X").programs["AnotherProgram"].tags
+        assert tags["protValue"].to_python()["startupStep"] == 4321
+        copy = tags["protCopy"]
+        assert copy.to_python()["startupStep"] == 1234
+        formats = {d.get("Format") for d in copy._element.findall("Data")}
+        assert formats == {"L5K", "Decorated"}
+        assert "7000,7000" in "".join(copy._element.find("Data").itertext())
+
+    def test_controller_tags_file_copy_from(self, editable):
+        create_tags_file(
+            editable,
+            tags=[
+                {
+                    "name": "protCtl",
+                    "copy_from": "\\AnotherProgram.seqCtrl_Protected_Instance",
+                }
+            ],
+            output_path="t.L5X",
+            context_path=EXAMPLE,
+        )
+
+        tag = _load(editable, OUT + "t.L5X").controller_tags["protCtl"]
+        formats = {d.get("Format") for d in tag._element.findall("Data")}
+        assert formats == {"L5K", "Decorated"}
+
+    def test_copy_from_missing_source(self, editable):
+        with pytest.raises(L5XError, match="copy_from tag 'nope' not found"):
+            create_tags_file(
+                editable,
+                tags=[{"name": "x", "copy_from": "nope"}],
+                output_path="t.L5X",
+                context_path=EXAMPLE,
+            )
+
+    def test_routine_file_with_new_protected_tag(self, editable):
+        create_routine_file(
+            editable,
+            program="AnotherProgram",
+            routine={
+                "name": "ProtUse",
+                "type": "RLL",
+                "rungs": [{"text": "SeqCtrl_Protected(newProtInst,0,0);"}],
+            },
+            tags=[
+                {
+                    "name": "newProtInst",
+                    "data_type": "SeqCtrl_Protected",
+                    "external_access": "Read/Write",
+                }
+            ],
+            output_path="r.L5X",
+            context_path=EXAMPLE,
+        )
+
+        prog = _load(editable, OUT + "r.L5X").programs["AnotherProgram"]
+        assert prog.tags["newProtInst"].data_type == "SeqCtrl_Protected"
+
+    def test_routine_file_tag_copy_from(self, editable):
+        create_routine_file(
+            editable,
+            program="AnotherProgram",
+            routine={
+                "name": "ProtUse",
+                "type": "RLL",
+                "rungs": [{"text": "SeqCtrl_Protected(newProtInst,0,0);"}],
+            },
+            tags=[{"name": "newProtInst", "copy_from": "seqCtrl_Protected_Instance"}],
+            output_path="r.L5X",
+            context_path=EXAMPLE,
+        )
+
+        tag = (
+            _load(editable, OUT + "r.L5X")
+            .programs["AnotherProgram"]
+            .tags["newProtInst"]
+        )
+        assert {d.get("Format") for d in tag._element.findall("Data")} == {
+            "L5K",
+            "Decorated",
+        }

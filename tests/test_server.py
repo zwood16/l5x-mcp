@@ -63,6 +63,15 @@ def _payload(result):
     return json.loads(result.content[0].text)
 
 
+async def test_add_tags_schema_has_copy_from(server):
+    async with Client(server) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+
+    schema = json.dumps(tools["add_tags"].input_schema)
+    assert '"copy_from"' in schema
+    assert "L5K" in schema
+
+
 async def test_lists_read_and_write_tools_by_default(server):
     async with Client(server) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}

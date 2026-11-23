@@ -686,6 +686,56 @@ COMP_TAGS_PROGRAM = Case(
     ),
 )
 
+COMP_TAGS_PROTECTED = Case(
+    id="comp_tags_protected",
+    golden="comp_tags_protected.L5X",
+    vm="example",
+    steps=(
+        S(
+            create_tags_file,
+            program="AnotherProgram",
+            tags=[
+                {
+                    "name": "protValue",
+                    "data_type": "SeqCtrl_Protected",
+                    "value": {"startupStep": 4321, "mode": True},
+                },
+                {
+                    "name": "protCopy",
+                    "copy_from": "seqCtrl_Protected_Instance",
+                    "value": {"startupStep": 1234},
+                },
+            ],
+            context_path=SOURCE,
+        ),
+    ),
+)
+
+COMP_ROUTINE_PROTECTED_TAGS = Case(
+    id="comp_routine_protected_tags",
+    golden="comp_routine_protected_tags.L5X",
+    vm="example",
+    steps=(
+        S(
+            create_routine_file,
+            program="AnotherProgram",
+            routine={
+                "name": "ProtUse",
+                "type": "RLL",
+                "rungs": [{"text": "SeqCtrl_Protected(newProtInst,0,0);"}],
+            },
+            tags=[
+                {
+                    "name": "newProtInst",
+                    "data_type": "SeqCtrl_Protected",
+                    "external_access": "Read/Write",
+                }
+            ],
+            context_path=SOURCE,
+        ),
+    ),
+)
+
 
 # ----------------------------------------------------------------------
 # Component files: export_component (existing objects, with dependencies)
@@ -791,6 +841,8 @@ CASES: tuple[Case, ...] = (
     COMP_ROUTINE_TAGS,
     COMP_RUNGS_TAGS,
     COMP_TAGS_PROGRAM,
+    COMP_TAGS_PROTECTED,
+    COMP_ROUTINE_PROTECTED_TAGS,
     EXP_DATA_TYPE,
     EXP_AOI,
     EXP_PROGRAM,

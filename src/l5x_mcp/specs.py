@@ -198,7 +198,7 @@ class AOISpecDict(TypedDict):
 
 @with_config(_FORBID)
 class TagSpecDict(TypedDict):
-    """A controller or program tag. Give data_type, or alias_for for an alias."""
+    """A controller or program tag. Give data_type (or copy_from), or alias_for."""
 
     name: str
     data_type: NotRequired[str | None]
@@ -235,6 +235,19 @@ class TagSpecDict(TypedDict):
                 "(controller tag, module I/O tag, or another tag in the same "
                 "call). Aliases take only name, description, radix and "
                 "external_access (ignored by Studio)."
+            ),
+        ]
+    ]
+    copy_from: NotRequired[
+        Annotated[
+            str | None,
+            Field(
+                description="Copy the initial data (all values, including AOI "
+                "local tags that only exist in the L5K block) from an existing "
+                "tag of the same data type and dimensions. Looked up in the same "
+                "scope first, then controller tags (or give \\Program.Tag). "
+                "value, if also given, is applied on top. data_type and "
+                "dimensions may then be omitted. Not allowed with alias_for."
             ),
         ]
     ]
@@ -321,8 +334,27 @@ def _check_tag(spec: TagSpec) -> None:
         raise L5XError(f"Invalid {owner}: alias tags take no value or dimensions")
 
 
-def _tag(data: dict[str, Any]) -> TagSpec:
-    spec = TagSpec.from_dict(dict(data))
+def _tag(data: dict[str, Any], *, in_program: bool = False) -> TagSpec:
+    """Build a ``TagSpec``; ``copy_from`` is not a py_l5x field.
+
+    The tools resolve ``copy_from`` themselves (see
+    ``l5x_mcp.tools.edit_tags.prepare_tags``), so it is dropped here. Program
+    specs do not support it.
+    """
+    fields = dict(data)
+    copy_from = fields.pop("copy_from", None)
+    if copy_from is not None and in_program:
+        raise L5XError(
+            f"Invalid tag spec {fields.get('name')!r}: copy_from is not "
+            "supported in program specs; create the program, then add the tag "
+            "with add_tags(copy_from=...)"
+        )
+    if copy_from is not None and fields.get("alias_for"):
+        raise L5XError(
+            f"Invalid tag spec {fields.get('name')!r}: copy_from is not "
+            "allowed on alias tags"
+        )
+    spec = TagSpec.from_dict(fields)
     _check_tag(spec)
     return spec
 
@@ -369,7 +401,9 @@ def to_py_spec(kind: str, data: dict[str, Any]) -> Any:
             spec = ProgramSpec(
                 **{
                     **fields,
-                    "tags": [_tag(t) for t in fields.get("tags") or []],
+                    "tags": [
+                        _tag(t, in_program=True) for t in fields.get("tags") or []
+                    ],
                     "routines": [_routine(r) for r in fields.get("routines") or []],
                 }
             )

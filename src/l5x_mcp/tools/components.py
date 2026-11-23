@@ -47,6 +47,7 @@ from l5x_mcp.specs import (
 from l5x_mcp.tools.edit_tags import (
     _add_tag_spec,
     check_spec_aliases,
+    prepare_tags,
     scope_collection,
     with_warnings,
 )
@@ -231,13 +232,15 @@ def _add_program_tags(
     Returns:
         The py_l5x tag specs and the alias warnings.
     """
-    specs = [to_py_spec("tag", t) for t in tags]
+    specs, copies = prepare_tags(project, tags, prog.name)
     for spec in specs:
         _check_free(prog.tags, spec.name, "Program tag")
     warnings = _check_aliases(project, specs, context_path, prog.name)
     for spec in specs:
         with edit_errors(f"tag {spec.name!r}"):
-            _add_tag_spec(prog.tags, spec)
+            _add_tag_spec(
+                prog.tags, spec, copies.get(spec.name.lower()), project.protected_aois
+            )
     return specs, warnings
 
 
@@ -503,11 +506,19 @@ def create_tags_file(
     overwrite: bool = False,
     program: str | None = None,
 ) -> dict[str, Any]:
-    """Create an import file for new controller tags (no project is modified).
+    """Create an import file for new tags (no project is modified).
+
+    Controller tags by default; pass program to create program tags of that
+    program instead.
 
     Each spec needs data_type (base tag) or alias_for (alias); value sets the
-    initial value. UDTs/AOIs used by the tags are taken from context_path and
-    included in the file.
+    initial value. copy_from clones the data (including AOI local-tag values)
+    of an existing tag of context_path (program tags of program first, then
+    controller tags; "\\Program.Tag" also works); data_type may then be omitted.
+    Tags of source-protected AOI types can take a value.
+
+    UDTs/AOIs used by the tags are taken from context_path and included in the
+    file.
 
     program: create program tags of that program instead of controller tags;
     the file is then a program-scope tag component (the shape of
@@ -562,12 +573,24 @@ def create_tags_file(
             ),
             protected,
         )
-    specs = [to_py_spec("tag", t) for t in tags]
+    specs, copies = prepare_tags(project, tags, "controller")
     for spec in specs:
         _check_free(project.controller_tags, spec.name, "Controller tag")
     warnings = _check_aliases(project, specs, context_path)
+    if copies:
+        # Copied data lives in the tag, so export tag objects, not specs.
+        for spec in specs:
+            with edit_errors(f"tag {spec.name!r}"):
+                _add_tag_spec(
+                    project.controller_tags,
+                    spec,
+                    copies.get(spec.name.lower()),
+                    project.protected_aois,
+                )
     with _protected_warnings() as protected, edit_errors("tags"):
-        component = project.export(specs)
+        component = project.export(
+            [project.controller_tags[s.name] for s in specs] if copies else specs
+        )
     return _write(
         registry,
         component,
@@ -608,6 +631,8 @@ def create_routine_file(
     so Studio creates them on import. Only tags the logic references are
     carried; unreferenced ones are reported in warnings. Types they use (UDTs,
     AOIs) are included.
+    A tag spec may use copy_from (an existing tag of context_path, program
+    first, then controller) to start from that tag's data.
 
     Without context_path the file has a v37 header, which Studio ignores
     (imports into v33+ verified); use instructions valid for the target version.
@@ -681,6 +706,8 @@ def create_rungs_file(
     so Studio creates them on import. Only tags the rungs reference are
     carried; unreferenced ones are reported in warnings. Types they use (UDTs,
     AOIs) are included.
+    A tag spec may use copy_from (an existing tag of context_path, program
+    first, then controller) to start from that tag's data.
 
     Without context_path the file has a v37 header, which Studio ignores
     (imports into v33+ verified); use instructions valid for the target version.

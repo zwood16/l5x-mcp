@@ -184,7 +184,8 @@ def check_data_type(project: Project, name: str) -> None:
     produce a file that Studio rejects on import.
 
     Args:
-        project: The project the tag is added to (its UDTs and AOIs count).
+        project: The project the tag is added to (its UDTs and AOIs count,
+            source-protected AOIs included).
         name: The data type name (case-sensitive, as in Logix).
 
     Raises:
@@ -197,6 +198,7 @@ def check_data_type(project: Project, name: str) -> None:
         or name.startswith(_SPECIAL_PREFIXES)
         or name in project.data_types
         or name in project.aois
+        or name in project.protected_aois
     ):
         return
     raise L5XError(

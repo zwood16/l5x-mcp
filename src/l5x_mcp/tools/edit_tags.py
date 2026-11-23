@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+import difflib
+from collections.abc import Callable, Collection, Mapping
 from typing import Any
 
 from py_l5x import AliasTag, ModuleTagRef, Tag, build_tag
+from py_l5x.parsers.layout import LayoutError
 from py_l5x.parsers.project import Project
 from py_l5x.parsers.tag import TagsCollection
 
@@ -256,6 +258,16 @@ def add_tags(
     rules and must be unique (case-insensitive) in the scope. All tags are
     added or none are.
 
+    copy_from clones an existing tag's data (all values, including the local
+    tags of AOI instances, which only exist in the L5K block): a tag of the
+    same data type and dimensions, looked up in the scope first, then in the
+    controller tags (or "\\Program.Tag"). data_type and dimensions may then
+    be omitted; value, if given, is applied on top. Not for alias tags.
+
+    Tags of source-protected AOI types can be added with a value (the readable
+    parameters are set; the AOI's local tags keep their defaults) or with
+    copy_from.
+
     Alias tags take name, alias_for, description, radix and external_access
     (Studio ignores external_access on aliases); no data_type, value,
     dimensions, constant or operand comments. The alias target (including any
@@ -280,7 +292,7 @@ def add_tags(
         raise L5XError("tags must contain at least one tag spec")
     edit = Edit.open(registry, path, output_path, overwrite)
     scope_name, collection = scope_collection(edit.project, scope)
-    specs = [to_py_spec("tag", data) for data in tags]
+    specs, copies = prepare_tags(edit.project, tags, scope_name)
     for spec in specs:
         if not spec.alias_for:
             if not spec.data_type:
@@ -292,7 +304,12 @@ def add_tags(
     warnings = check_spec_aliases(edit.project, specs, scope_name)
     for spec in specs:
         with edit_errors(f"tag {spec.name!r}"):
-            _add_tag_spec(collection, spec)
+            _add_tag_spec(
+                collection,
+                spec,
+                copies.get(spec.name.lower()),
+                edit.project.protected_aois,
+            )
     return edit.save(
         with_warnings(
             {"scope": scope_name, "added": [spec.name for spec in specs]}, warnings
@@ -345,7 +362,123 @@ def check_spec_aliases(
     return warnings
 
 
-def _add_tag_spec(collection: TagsCollection, spec: Any) -> Any:
+def find_copy_source(project: Project, ref: str, scope: str) -> Tag:
+    """Find the tag a ``copy_from`` refers to.
+
+    Args:
+        project: The project to look in (edited or context project).
+        ref: Tag name (searched in ``scope``, then controller tags) or
+            ``\\Program.Tag``.
+        scope: ``"controller"`` or the canonical name of the target program.
+
+    Returns:
+        The source base tag.
+
+    Raises:
+        L5XError: If the tag is not found, is not a plain tag name, or is not a
+            base tag (alias, module I/O).
+    """
+    parsed = parse_operand(ref)
+    if parsed.segments or ":" in parsed.base:
+        raise L5XError(
+            f"copy_from {ref!r}: give a controller or program tag name, not a "
+            "member path or module I/O tag"
+        )
+    if parsed.program is not None:
+        scopes = [scope_collection(project, parsed.program)]
+    else:
+        scopes = [scope_collection(project, scope)] if scope != "controller" else []
+        scopes.append(("controller", project.controller_tags))
+    for _, collection in scopes:
+        for key, tag in collection.items():
+            if key.lower() == parsed.base.lower():
+                if not isinstance(tag, Tag):
+                    raise L5XError(
+                        f"copy_from {ref!r}: {key!r} is an alias tag, which has "
+                        "no data to copy"
+                    )
+                return tag
+    where = " or ".join(
+        "controller tags" if name == "controller" else f"program {name}"
+        for name, _ in scopes
+    )
+    names = [key for _, collection in scopes for key in collection]
+    close = difflib.get_close_matches(parsed.base, names, n=5, cutoff=0.5)
+    hint = f" Close names: {', '.join(close)}." if close else ""
+    raise L5XError(f"copy_from tag {ref!r} not found in {where}.{hint}")
+
+
+def _dims(value: Any) -> tuple[int, ...]:
+    if value is None:
+        return ()
+    return (value,) if isinstance(value, int) else tuple(value)
+
+
+def prepare_tags(
+    project: Project, tags: list[TagSpecDict], scope: str
+) -> tuple[list[Any], dict[str, tuple[Tag, Any]]]:
+    """Convert tag specs to py_l5x specs and resolve their ``copy_from`` sources.
+
+    A spec with ``copy_from`` gets its data type and dimensions from the source
+    tag when omitted (and must match it when given). Its ``value`` is taken out
+    of the py_l5x spec: :func:`_add_tag_spec` applies it after the copy.
+
+    Args:
+        project: The project the sources are looked up in.
+        tags: Tag specs from the tool call.
+        scope: ``"controller"`` or the canonical target program name.
+
+    Returns:
+        The py_l5x specs, and ``{lower-case tag name: (source tag, value)}``
+        for the specs that have ``copy_from``.
+
+    Raises:
+        L5XError: If a spec is invalid or a source is missing or mismatched.
+    """
+    specs: list[Any] = []
+    copies: dict[str, tuple[Tag, Any]] = {}
+    for data in tags:
+        ref = data.get("copy_from")
+        if ref is None:
+            specs.append(to_py_spec("tag", data))
+            continue
+        name = data.get("name")
+        if data.get("alias_for"):
+            raise L5XError(
+                f"Invalid tag spec {name!r}: copy_from is not allowed on alias tags"
+            )
+        source = find_copy_source(project, ref, scope)
+        given = data.get("data_type")
+        if given and given != source.data_type:
+            raise L5XError(
+                f"tag {name!r}: data_type {given!r} differs from copy_from "
+                f"{ref!r} ({source.data_type!r}); omit data_type or use the "
+                "source's type"
+            )
+        source_dims = tuple(getattr(source, "dimensions", ()))
+        if data.get("dimensions") is not None and _dims(data["dimensions"]) != (
+            source_dims
+        ):
+            raise L5XError(
+                f"tag {name!r}: dimensions {data['dimensions']!r} differ from "
+                f"copy_from {ref!r} ({list(source_dims)})"
+            )
+        fields = {k: v for k, v in data.items() if k not in ("value", "copy_from")}
+        fields["data_type"] = source.data_type
+        if source_dims:
+            fields["dimensions"] = list(source_dims)
+        spec = to_py_spec("tag", fields)
+        specs.append(spec)
+        copies[spec.name.lower()] = (source, data.get("value"))
+    return specs, copies
+
+
+def _add_tag_spec(
+    collection: TagsCollection,
+    spec: Any,
+    copy: tuple[Tag, Any] | None = None,
+    protected: Collection[str] = (),
+) -> Any:
     """Add a tag from a ``TagSpec`` (validated metadata, aliases keep radix).
 
     Mirrors ``TagsCollection.add``; this should become a public py_l5x API
@@ -354,12 +487,30 @@ def _add_tag_spec(collection: TagsCollection, spec: Any) -> Any:
     Args:
         collection: The collection to add to.
         spec: The py_l5x ``TagSpec``.
+        copy: ``(source tag, value)`` from :func:`prepare_tags`: the tag's data
+            is copied from the source, then ``value`` (if not ``None``) is set
+            on top, so AOI local-tag values in the L5K block are kept.
+        protected: Names of source-protected AOI types (for the error text).
 
     Returns:
         The new tag.
     """
     collection._check_new_name(spec.name)
-    return collection._append(build_tag(spec, collection._registry))
+    try:
+        tag = collection._append(build_tag(spec, collection._registry))
+    except LayoutError as exc:
+        if spec.data_type in protected:
+            raise L5XError(
+                f"values can't be set on tags of source-protected AOI type "
+                f"{spec.data_type}: {exc}; use copy_from to clone an existing tag"
+            ) from exc
+        raise
+    if copy is not None:
+        source, value = copy
+        tag.copy_data_from(source)
+        if value is not None:
+            tag.value = value
+    return tag
 
 
 def check_alias_target(
@@ -560,8 +711,11 @@ def set_tag_values(
     partial {member: value} dict; arrays a list or {index: value}. Unmentioned
     members keep their values. TIME values accept literals such as "T#5s".
     Aliases are followed to their target. Bits of integers (Tag.3) are
-    read-only; set the whole integer instead. All values are validated first;
-    if any fails, nothing is written.
+    read-only; set the whole integer instead. For AOI-typed tags (including
+    source-protected AOIs) the L5K block is kept because it holds the AOI local
+    tags' values; Studio uses the Decorated values for the parameters
+    (verified), so the two blocks differing is expected. All values are
+    validated first; if any fails, nothing is written.
 
     Args:
         registry: ProjectRegistry to load from.

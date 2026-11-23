@@ -4,6 +4,7 @@ import pytest
 from py_l5x import AliasTag, load
 
 from l5x_mcp.registry import DEFAULT_OUTPUT_DIR, ItemNotFoundError, L5XError
+from l5x_mcp.specs import from_py_spec, to_py_spec
 from l5x_mcp.tools.definitions import get_spec, rename_program
 from l5x_mcp.tools.edit_logic import add_rungs
 from l5x_mcp.tools.edit_tags import (
@@ -73,6 +74,28 @@ class TestAddTags:
         assert result["scope"] == "SafetyProgram"
         program = _read(editable, OUT + "out.L5X").programs["SafetyProgram"]
         assert program.tags["ProgFlag"].data_type == "BOOL"
+
+    def test_adds_program_tag_of_protected_aoi_type(self, editable):
+        result = add_tags(
+            editable,
+            tags=[
+                {
+                    "name": "newProt",
+                    "data_type": "SeqCtrl_Protected",
+                    "description": "New protected instance",
+                }
+            ],
+            scope="AnotherProgram",
+            output_path="out.L5X",
+            path=EXAMPLE,
+        )
+
+        assert result["added"] == ["newProt"]
+        tag = (
+            _read(editable, OUT + "out.L5X").programs["AnotherProgram"].tags["newProt"]
+        )
+        assert tag.data_type == "SeqCtrl_Protected"
+        assert tag.description == "New protected instance"
 
     def test_unknown_data_type_writes_nothing(self, editable):
         with pytest.raises(L5XError, match="unknown data type 'NOTATYPE'"):
@@ -748,3 +771,149 @@ class TestAliasWarnings:
             path=EXAMPLE,
         )
         assert "warnings" not in result
+
+
+L5K_SEQ = "[1,7000,7000,0,0,0,0,0,0,7000,0,[0,0,0]]"
+
+
+def _data_formats(tag):
+    return {d.get("Format"): d for d in tag._element.findall("Data")}
+
+
+class TestAddTagsProtectedAndCopy:
+    def test_protected_type_takes_a_value(self, editable):
+        add_tags(
+            editable,
+            tags=[
+                {
+                    "name": "protValue",
+                    "data_type": "SeqCtrl_Protected",
+                    "value": {"startupStep": 4321, "mode": True},
+                }
+            ],
+            scope="AnotherProgram",
+            output_path="out.L5X",
+            path=EXAMPLE,
+        )
+
+        tag = (
+            _read(editable, OUT + "out.L5X")
+            .programs["AnotherProgram"]
+            .tags["protValue"]
+        )
+        assert tag.to_python()["startupStep"] == 4321
+        assert tag.to_python()["mode"] is True
+
+    def test_copy_from_keeps_l5k_and_applies_value(self, editable):
+        result = add_tags(
+            editable,
+            tags=[
+                {
+                    "name": "protCopy",
+                    "copy_from": "seqCtrl_Protected_Instance",
+                    "value": {"startupStep": 1234},
+                }
+            ],
+            scope="AnotherProgram",
+            output_path="out.L5X",
+            path=EXAMPLE,
+        )
+
+        assert result["added"] == ["protCopy"]
+        tag = (
+            _read(editable, OUT + "out.L5X").programs["AnotherProgram"].tags["protCopy"]
+        )
+        assert tag.data_type == "SeqCtrl_Protected"
+        formats = _data_formats(tag)
+        assert set(formats) == {"L5K", "Decorated"}
+        assert L5K_SEQ in "".join(formats["L5K"].itertext())
+        assert tag.to_python()["startupStep"] == 1234
+        assert tag.to_python()["currentStep"] == 7000
+
+    def test_copy_from_normal_type_with_program_path(self, editable):
+        add_tags(
+            editable,
+            tags=[{"name": "TimerCopy", "copy_from": "a_timer"}],
+            scope="MainProgram",
+            output_path="out.L5X",
+            path=EXAMPLE,
+        )
+
+        src = _read(editable, EXAMPLE).programs["MainProgram"].tags["a_timer"]
+        copy = (
+            _read(editable, OUT + "out.L5X").programs["MainProgram"].tags["TimerCopy"]
+        )
+        assert copy.data_type == "TIMER"
+        assert copy.to_python() == src.to_python()
+
+    def test_copy_from_qualified_program_tag(self, editable):
+        add_tags(
+            editable,
+            tags=[
+                {
+                    "name": "protCtl",
+                    "copy_from": "\\AnotherProgram.seqCtrl_Protected_Instance",
+                }
+            ],
+            output_path="out.L5X",
+            path=EXAMPLE,
+        )
+
+        tag = _read(editable, OUT + "out.L5X").controller_tags["protCtl"]
+        assert tag.data_type == "SeqCtrl_Protected"
+
+    def test_copy_from_missing_source_lists_close_names(self, editable):
+        with pytest.raises(L5XError, match="not found.*seqCtrl_Protected_Instance"):
+            add_tags(
+                editable,
+                tags=[{"name": "x", "copy_from": "seqCtrl_Protected_Instanc"}],
+                scope="AnotherProgram",
+                output_path="out.L5X",
+                path=EXAMPLE,
+            )
+        assert not (editable.root / OUT_DIR / "out.L5X").exists()
+
+    def test_copy_from_type_mismatch(self, editable):
+        with pytest.raises(L5XError, match="differs from copy_from"):
+            add_tags(
+                editable,
+                tags=[{"name": "x", "data_type": "DINT", "copy_from": "a_timer"}],
+                scope="MainProgram",
+                output_path="out.L5X",
+                path=EXAMPLE,
+            )
+
+    def test_copy_from_dimension_mismatch(self, editable):
+        with pytest.raises(L5XError, match="dimensions"):
+            add_tags(
+                editable,
+                tags=[{"name": "x", "dimensions": 3, "copy_from": "a_timer"}],
+                scope="MainProgram",
+                output_path="out.L5X",
+                path=EXAMPLE,
+            )
+
+    def test_copy_from_with_alias_for_is_rejected(self, editable):
+        with pytest.raises(L5XError, match="alias"):
+            add_tags(
+                editable,
+                tags=[{"name": "x", "alias_for": "a_dint", "copy_from": "a_timer"}],
+                scope="MainProgram",
+                output_path="out.L5X",
+                path=EXAMPLE,
+            )
+
+    def test_copy_from_in_program_spec_is_rejected(self, editable):
+        with pytest.raises(L5XError, match="copy_from is not supported"):
+            to_py_spec(
+                "program",
+                {"name": "P", "tags": [{"name": "x", "copy_from": "a_timer"}]},
+            )
+
+    def test_copy_from_never_in_get_spec_output(self, editable):
+        spec = get_spec(editable, "program", "MainProgram", path=EXAMPLE)
+        assert "copy_from" not in str(spec)
+        assert from_py_spec(to_py_spec("tag", {"name": "t", "data_type": "DINT"})) == {
+            "name": "t",
+            "data_type": "DINT",
+        }
