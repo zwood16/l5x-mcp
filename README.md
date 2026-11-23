@@ -40,7 +40,7 @@ that meets this server's requirement (currently `py-l5x>=0.4.0`).
 **Global install** (puts the `l5x-mcp` command on your PATH):
 
 ```bash
-uv tool install --with https://github.com/zwood16/py_l5x/releases/download/v0.4.0/py_l5x-0.4.0-py3-none-any.whl https://github.com/zwood16/l5x-mcp/releases/download/v0.2.0/l5x_mcp-0.2.0-py3-none-any.whl
+uv tool install --with https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl https://github.com/zwood16/l5x-mcp/releases/download/v0.3.0/l5x_mcp-0.3.0-py3-none-any.whl
 ```
 
 Then register the `l5x-mcp` command with Claude Code (see
@@ -86,7 +86,7 @@ Pick the line that matches how you installed the server:
 claude mcp add l5x -s user -- l5x-mcp
 
 # No install: run straight from the release wheels with uvx
-claude mcp add l5x -s user -- uvx --with https://github.com/zwood16/py_l5x/releases/download/v0.4.0/py_l5x-0.4.0-py3-none-any.whl --from https://github.com/zwood16/l5x-mcp/releases/download/v0.2.0/l5x_mcp-0.2.0-py3-none-any.whl l5x-mcp
+claude mcp add l5x -s user -- uvx --with https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl --from https://github.com/zwood16/l5x-mcp/releases/download/v0.3.0/l5x_mcp-0.3.0-py3-none-any.whl l5x-mcp
 
 # Source checkout (run `uv sync` in the checkout first)
 claude mcp add l5x -s user -- uv run --project /path/to/l5x-mcp --no-sync l5x-mcp
@@ -192,6 +192,12 @@ Rules shared by every write tool:
   …) can't be checked; those aliases are accepted with a `warnings` entry in the result.
 - Component files built without `context_path` carry a v37 header. Studio ignores it:
   py_l5x verified imports into v33, v35, v37 and v38.
+- Source-protected AOIs and routines are listed with `protected: true`. Their encoded
+  logic can't be read, searched or edited, but a protected AOI's parameters and the tags
+  of its type read normally. Component files copy a protected AOI unchanged, as Studio's
+  own exports do, and say so in `warnings`. A program file also warns that tags used only
+  inside a protected routine are not included. Studio v37 imports these files without
+  the source key (verified through the SDK).
 - Logic is only checked for balanced brackets and a trailing `;`. Undefined tags and
   wrong instructions show up when Studio verifies the project. Use instructions that
   exist in your version (v36+ uses `MOVE`, `EQ`, … instead of `MOV`, `EQU`, …).

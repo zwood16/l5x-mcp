@@ -1255,6 +1255,37 @@ class TestRoutineOperands:
         assert "values_note" not in result
         assert all("value" not in e for e in result["operands"].values())
 
+    def test_aoi_operand_type_desc(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="Logic",
+            aoi="FanucRobot",
+            detail="logic",
+            start_rung=1,
+            end_rung=1,
+            path="example.L5X",
+        )
+        assert result["operands"]["robotUI.IMSTP"] == {
+            "type": "BOOL",
+            "type_desc": "Fanuc Robot UO (User Output) Signals",
+        }
+
+    def test_include_values_fills_timer_placeholders(self, registry):
+        # FanucRobot rung 3: TON(faultResetTimer,?,?)
+        kwargs = {
+            "routine": "Logic",
+            "aoi": "FanucRobot",
+            "detail": "logic",
+            "start_rung": 3,
+            "end_rung": 3,
+            "path": "example.L5X",
+        }
+        off = get_routine_logic(registry, **kwargs)["operands"]
+        assert "faultResetTimer.PRE" not in off
+        on = get_routine_logic(registry, include_values=True, **kwargs)["operands"]
+        assert on["faultResetTimer.PRE"] == {"type": "DINT", "value": 250}
+        assert on["faultResetTimer.ACC"] == {"type": "DINT", "value": 0}
+
     def test_include_values_requires_include_operands(self, registry):
         with pytest.raises(L5XError, match="requires include_operands"):
             get_routine_logic(
@@ -1447,3 +1478,53 @@ class TestOperandBudgetAccounting:
         assert selection.ledger.entries == {}
         assert selection.content_truncated is False
         assert json_size({"rungs": selection.items}) <= 1000
+
+
+class TestProtectedRoutines:
+    """AnotherProgram has the source-protected routine SequenceRoutine_Protected."""
+
+    def test_list_routines_flags_protected(self, registry):
+        result = list_routines(registry, program="AnotherProgram", path="example.L5X")
+        assert result["routines"][-1] == {
+            "name": "SequenceRoutine_Protected",
+            "type": "RLL",
+            "protected": True,
+        }
+        assert [r["name"] for r in result["routines"][:-1]] == [
+            "io",
+            "Main",
+            "StructuredTextRoutine",
+        ]
+
+    def test_get_program_lists_protected_routine(self, registry):
+        result = get_program(registry, "AnotherProgram", path="example.L5X")
+        assert {
+            "name": "SequenceRoutine_Protected",
+            "type": "RLL",
+            "protected": True,
+        } in result["routines"]
+
+    def test_unprotected_program_has_no_protected_entries(self, registry):
+        result = list_routines(registry, program="MainProgram", path="example.L5X")
+        assert all("protected" not in r for r in result["routines"])
+
+    def test_get_routine_logic_refuses_protected(self, registry):
+        with pytest.raises(L5XError, match="source-protected; its logic is encoded"):
+            get_routine_logic(
+                registry,
+                routine="sequenceroutine_protected",
+                program="AnotherProgram",
+                path="example.L5X",
+            )
+
+    def test_main_rung_resolves_protected_aoi_instance(self, registry):
+        result = get_routine_logic(
+            registry,
+            routine="Main",
+            program="AnotherProgram",
+            detail="logic",
+            path="example.L5X",
+        )
+        assert result["operands"]["seqCtrl_Protected_Instance"] == {
+            "type": "SeqCtrl_Protected"
+        }

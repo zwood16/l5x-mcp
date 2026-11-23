@@ -22,7 +22,7 @@ from l5x_mcp.tools.definitions import (
     schedule_program,
     set_description,
 )
-from l5x_mcp.tools.edit_logic import add_rungs
+from l5x_mcp.tools.edit_logic import add_rungs, remove_routine, rename_routine
 
 OUT_DIR = DEFAULT_OUTPUT_DIR
 OUT = OUT_DIR + "/"
@@ -544,3 +544,67 @@ class TestSetDescription:
                 output_path="out.L5X",
                 path=EXAMPLE,
             )
+
+
+class TestProtectedAois:
+    """Source-protected AOIs give a clear error instead of 'not found'."""
+
+    PROTECTED = "example.L5X"
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda r, p: get_spec(r, "aoi", "seqctrl_protected", path=p),
+            lambda r, p: rename_aoi(r, "SeqCtrl_Protected", "X", "o.L5X", path=p),
+            lambda r, p: remove_aoi(r, "SeqCtrl_Protected", "o.L5X", path=p),
+            lambda r, p: set_description(
+                r, "aoi", "SeqCtrl_Protected", "d", "o.L5X", path=p
+            ),
+            lambda r, p: replace_aoi(
+                r,
+                {
+                    "name": "SeqCtrl_Protected",
+                    "parameters": [],
+                    "routines": [{"name": "Logic", "type": "RLL"}],
+                },
+                "o.L5X",
+                path=p,
+            ),
+        ],
+    )
+    def test_refused(self, editable, call):
+        with pytest.raises(L5XError, match="source-protected"):
+            call(editable, self.PROTECTED)
+        assert not (editable.root / DEFAULT_OUTPUT_DIR / "o.L5X").exists()
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            lambda r, p: get_spec(
+                r, "routine", "sequenceroutine_protected", "AnotherProgram", path=p
+            ),
+            lambda r, p: set_description(
+                r,
+                "routine",
+                "SequenceRoutine_Protected",
+                "d",
+                "o.L5X",
+                program="AnotherProgram",
+                path=p,
+            ),
+            lambda r, p: rename_routine(
+                r, "AnotherProgram", "SequenceRoutine_Protected", "X", "o.L5X", path=p
+            ),
+            lambda r, p: remove_routine(
+                r, "AnotherProgram", "SequenceRoutine_Protected", "o.L5X", path=p
+            ),
+        ],
+    )
+    def test_protected_routine_refused(self, editable, call):
+        with pytest.raises(L5XError, match="routine .* is source-protected"):
+            call(editable, self.PROTECTED)
+        assert not (editable.root / DEFAULT_OUTPUT_DIR / "o.L5X").exists()
+
+    def test_unknown_aoi_still_not_found(self, editable):
+        with pytest.raises(L5XError, match="not found"):
+            get_spec(editable, "aoi", "NoSuchAoi", path=self.PROTECTED)

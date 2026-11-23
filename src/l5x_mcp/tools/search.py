@@ -431,6 +431,8 @@ def find_references(
                    routine_type, rung/line, text, comment (RLL only),
                    usage (tag kind only)
         - summary: Dict of "<container>/<routine>": count grouping
+        - note: Lists source-protected routines in scope (their logic is not
+                searched), when any.
 
     Raises:
         L5XError: If query is empty, limit is out of range, or program name not found.
@@ -443,7 +445,7 @@ def find_references(
     project_path, project = registry.get_with_path(path)
 
     # Get set of AOI names for usage classification
-    aoi_names = set(project.aois.keys())
+    aoi_names = {*project.aois, *project.protected_aois}
 
     # Resolve program if specified
     target_programs = {}
@@ -648,8 +650,22 @@ def find_references(
 
     result["matches"] = matches
     result["summary"] = summary
+    if note := _protected_routines_note(target_programs):
+        result["note"] = note
 
     return result
+
+
+def _protected_routines_note(programs: Any) -> str | None:
+    """Return a note listing source-protected routines (not searched), if any."""
+    names = [
+        f"{prog.name}/{name}"
+        for prog in programs.values()
+        for name in prog.protected_routines
+    ]
+    if not names:
+        return None
+    return f"logic not searched: source-protected routines {', '.join(names)}"
 
 
 _INSTRUCTION_RE = re.compile(r"\b([A-Z_][A-Z0-9_]*)\s*\(", re.IGNORECASE)
@@ -675,6 +691,7 @@ def instruction_usage(
         Dict with keys:
         - file: Path to the L5X file
         - instructions: List of {"name", "count"} dicts sorted by count (desc)
+        - note: Lists source-protected routines in scope (not counted), if any.
     """
     project_path, project = registry.get_with_path(path)
 
@@ -691,7 +708,9 @@ def instruction_usage(
 
     # Logix mnemonics are case-insensitive; count by upper-case key but report
     # AOIs under their defined names.
-    aoi_by_upper = {name.upper(): name for name in project.aois}
+    aoi_by_upper = {
+        name.upper(): name for name in [*project.aois, *project.protected_aois]
+    }
     routine_groups = [prog.routines for prog in target_programs.values()]
     if program is None:
         routine_groups.extend(aoi.routines for aoi in project.aois.values())
@@ -713,4 +732,10 @@ def instruction_usage(
         else:
             instructions.append({"name": key, "count": count})
 
-    return {"file": registry.relpath(project_path), "instructions": instructions}
+    result: dict[str, Any] = {
+        "file": registry.relpath(project_path),
+        "instructions": instructions,
+    }
+    if note := _protected_routines_note(target_programs):
+        result["note"] = note
+    return result

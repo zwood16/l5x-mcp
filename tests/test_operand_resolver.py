@@ -291,7 +291,10 @@ class TestAoiContainer:
             "desc": "Active Step Number",
             "type": "DINT",
         }
-        assert fanuc.resolve("robotUO.prgRunning") == {"type": "BOOL"}
+        assert fanuc.resolve("robotUO.prgRunning") == {
+            "type": "BOOL",
+            "type_desc": "Robot UI (User Input) Signals",
+        }
 
     def test_parameter_without_description_uses_its_own(self, project):
         """A value parameter reports its own description and type."""
@@ -312,7 +315,10 @@ class TestAoiContainer:
         result = fanuc.operands_for_rung(_aoi_rung(project, "FanucRobot", 12))
         assert result["seq.fault.0"]["desc"] == "Robot fault did not reset when running"
         assert result["robotFaultResetTimeout1.DN"] == {"type": "BOOL"}
-        assert result["robotUO.fault"] == {"type": "BOOL"}
+        assert result["robotUO.fault"] == {
+            "type": "BOOL",
+            "type_desc": "Robot UI (User Input) Signals",
+        }
         assert "scope" not in result["seq.cmdAbort"]
 
     def test_aoi_cannot_see_controller_or_program_tags(self, project):
@@ -331,6 +337,130 @@ class TestAoiContainer:
             "indexed": True,
         }
         assert aoi.resolve("robotAlarmCode") == {"type": "robotAlarmCode"}
+
+
+class TestTypeDesc:
+    """type_desc: first line of the base data type description as a fallback."""
+
+    def test_aoi_parameter_member_without_descriptions(self, project):
+        """FanucRobot robotUI.hold has no desc, so the UDT description is used."""
+        fanuc = OperandResolver(project, "aoi", "FanucRobot")
+        assert fanuc.resolve("robotUI.hold") == {
+            "type": "BOOL",
+            "type_desc": "Fanuc Robot UO (User Output) Signals",
+        }
+
+    def test_not_added_when_entry_has_a_description(self, project):
+        """desc and tag_desc entries never get a type_desc."""
+        fanuc = OperandResolver(project, "aoi", "FanucRobot")
+        assert "type_desc" not in fanuc.resolve("seq.fault.0")
+        main = OperandResolver(project, "program", "MainProgram")
+        assert "type_desc" not in main.resolve("a_dint.1")  # tag_desc
+        assert "type_desc" not in main.resolve("A_CONSTANT")  # desc
+
+    def test_omitted_for_builtin_types(self, project):
+        """TIMER and other types with no project definition give no type_desc."""
+        main = OperandResolver(project, "program", "MainProgram")
+        assert main.resolve("a_timer") == {"type": "TIMER"}
+
+    def test_program_and_controller_tags_and_aoi_types(self, example_path):
+        """Program tags, controller tags and AOI-typed tags use their type."""
+        from py_l5x import load
+
+        project = load(str(example_path))
+        project.aois["SeqCtrl"].description = "Sequence control\nsecond line"
+        project.programs["MainProgram"].tags.add("ui_prog", "robotUI")
+        project.controller_tags.add("ui_ctrl", "robotUI")
+        main = OperandResolver(project, "program", "MainProgram")
+        assert main.resolve("ui_prog")["type_desc"] == (
+            "Fanuc Robot UO (User Output) Signals"
+        )
+        assert main.resolve("ui_ctrl")["type_desc"] == (
+            "Fanuc Robot UO (User Output) Signals"
+        )
+        assert main.resolve("sequence")["type_desc"] == "Sequence control"
+        assert main.resolve("sequence.currentStep")["desc"] == "Active Step Number"
+
+
+class TestProtectedAoiOperands:
+    """Operands of tags whose type is the protected AOI SeqCtrl_Protected."""
+
+    def test_instance_and_members_resolve_with_values(self, project):
+        resolver = OperandResolver(
+            project, "program", "AnotherProgram", include_values=True
+        )
+        # The protected AOI has no description, so no type_desc either.
+        assert resolver.resolve("seqCtrl_Protected_Instance") == {
+            "type": "SeqCtrl_Protected"
+        }
+        assert resolver.resolve("seqCtrl_Protected_Instance.currentStep") == {
+            "desc": "Active Step Number",
+            "type": "DINT",
+            "value": 7000,
+        }
+
+    def test_member_description_comes_from_protected_parameters(self, project):
+        resolver = OperandResolver(project, "program", "AnotherProgram")
+        entry = resolver.resolve("seqCtrl_Protected_Instance.autoModeOverride")
+        assert entry["desc"].startswith("Optional bit to externally change")
+        assert entry["type"] == "BOOL"
+        assert "type_desc" not in entry
+
+    def test_type_desc_uses_protected_description(self, example_path):
+        from py_l5x import load
+
+        project = load(str(example_path))
+        project.protected_aois["SeqCtrl_Protected"].description = "Protected seq\nx"
+        resolver = OperandResolver(project, "program", "AnotherProgram")
+        tag = type("T", (), {"data_type": "SeqCtrl_Protected"})()
+        assert resolver._type_desc(tag) == "Protected seq"
+
+
+class TestPlaceholders:
+    """include_values fills ? placeholders of timers and counters."""
+
+    def test_ton_placeholders_with_values(self, project):
+        """TON(a_timer,?,?) adds a_timer.PRE and a_timer.ACC entries."""
+        resolver = OperandResolver(
+            project, "program", "MainProgram", include_values=True
+        )
+        result = resolver.operands_for_rung("TON(a_timer,?,?);")
+        assert list(result) == ["a_timer", "a_timer.PRE", "a_timer.ACC"]
+        assert result["a_timer.PRE"]["type"] == "DINT"
+        assert "value" in result["a_timer.PRE"]
+        assert "value" in result["a_timer.ACC"]
+
+    def test_no_placeholder_entries_without_include_values(self, main):
+        """Without include_values the map is unchanged."""
+        result = main.operands_for_rung("TON(a_timer,?,?);")
+        assert list(result) == ["a_timer"]
+
+    @pytest.mark.parametrize("name", ["TON", "TOF", "RTO", "CTU", "CTD"])
+    def test_all_table_instructions(self, project, name):
+        """Each instruction in the table maps args 1 and 2 to PRE and ACC."""
+        resolver = OperandResolver(
+            project, "program", "MainProgram", include_values=True
+        )
+        tag = "a_counter" if name.startswith("CT") else "a_timer"
+        result = resolver.operands_for_rung(f"{name}({tag},?,?);")
+        assert f"{tag}.PRE" in result
+        assert f"{tag}.ACC" in result
+
+    def test_only_question_mark_arguments_are_filled(self, project):
+        """A literal preset keeps its place; only the ? accum is filled."""
+        resolver = OperandResolver(
+            project, "program", "MainProgram", include_values=True
+        )
+        result = resolver.operands_for_rung("TON(a_timer,500,?);")
+        assert list(result) == ["a_timer", "a_timer.ACC"]
+
+    def test_other_instructions_are_not_filled(self, project):
+        """Instructions outside the table keep their ? untouched."""
+        resolver = OperandResolver(
+            project, "program", "MainProgram", include_values=True
+        )
+        result = resolver.operands_for_rung("RES(a_timer);CTUD(a_counter,?,?);")
+        assert list(result) == ["a_timer", "a_counter"]
 
 
 class TestConstruction:

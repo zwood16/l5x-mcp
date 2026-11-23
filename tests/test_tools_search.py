@@ -771,3 +771,45 @@ class TestSearchOutputFormat:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestProtectedAoiSearch:
+    """Calls of a source-protected AOI are found like any AOI call."""
+
+    PROTECTED = "example.L5X"
+
+    def test_find_references_to_protected_aoi_name(self, registry):
+        result = find_references(
+            registry, "SeqCtrl_Protected", kind="instruction", path=self.PROTECTED
+        )
+        assert result["summary"] == {"AnotherProgram/Main": 1}
+
+    def test_instruction_usage_marks_protected_aoi(self, registry):
+        result = instruction_usage(registry, path=self.PROTECTED)
+        entry = next(
+            i for i in result["instructions"] if i["name"] == "SeqCtrl_Protected"
+        )
+        assert entry == {"name": "SeqCtrl_Protected", "count": 1, "aoi": True}
+
+    def test_protected_routines_noted_when_searching_their_program(self, registry):
+        result = find_references(
+            registry,
+            "seqCtrl_Protected_Instance",
+            program="AnotherProgram",
+            path=self.PROTECTED,
+        )
+        assert result["total_matches"] == 1
+        assert "AnotherProgram/SequenceRoutine_Protected" in result["note"]
+        assert "logic not searched" in result["note"]
+
+    def test_no_note_without_protected_routines(self, registry):
+        result = find_references(
+            registry, "an_int", program="MainProgram", path=self.PROTECTED
+        )
+        assert "note" not in result
+
+    def test_instruction_usage_notes_protected_routines(self, registry):
+        result = instruction_usage(registry, path=self.PROTECTED)
+        assert "AnotherProgram/SequenceRoutine_Protected" in result["note"]
+        scoped = instruction_usage(registry, program="MainProgram", path=self.PROTECTED)
+        assert "note" not in scoped

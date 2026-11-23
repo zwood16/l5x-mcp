@@ -8,7 +8,7 @@ from py_l5x.parsers.project import Project
 from py_l5x.parsers.routine import Routine
 
 from l5x_mcp.editing import Edit, edit_errors
-from l5x_mcp.registry import L5XError, ProjectRegistry, lookup
+from l5x_mcp.registry import L5XError, ProjectRegistry, lookup, lookup_routine
 from l5x_mcp.specs import RungSpecDict
 from l5x_mcp.tools.edit_tags import references
 from l5x_mcp.tools.programs import _routine_type
@@ -26,7 +26,7 @@ def _routine(project: Project, program: str, routine: str) -> tuple[str, Routine
         The canonical program name and the routine.
     """
     prog = lookup(project.programs, program, "Program")
-    return prog.name, lookup(prog.routines, routine, "Routine")
+    return prog.name, lookup_routine(prog, routine, "changed")
 
 
 def _require_type(routine: Routine, kind: str) -> None:

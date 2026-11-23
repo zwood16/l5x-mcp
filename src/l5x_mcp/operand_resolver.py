@@ -22,11 +22,21 @@ from typing import Any, Literal
 from py_l5x import ArrayNode, AtomicNode, StringNode, StructNode, TagNode
 
 from l5x_mcp.operand_paths import Resolved, parse_operand, resolve_in_aoi, resolve_tag
-from l5x_mcp.operands import extract_rll_operands, extract_st_operands
+from l5x_mcp.operands import extract_rll_operands, extract_st_operands, parse_rll
 from l5x_mcp.registry import ItemNotFoundError, L5XError, lookup
 from l5x_mcp.serialize import compact, first_line, jsonable
 
-__all__ = ["OperandResolver"]
+__all__ = ["PLACEHOLDER_MEMBERS", "OperandResolver"]
+
+#: RLL instructions whose ``?`` arguments Studio displays from the first
+#: argument's tag: ``{mnemonic: {argument index: member}}``.
+PLACEHOLDER_MEMBERS: dict[str, dict[int, str]] = {
+    "TON": {1: "PRE", 2: "ACC"},
+    "TOF": {1: "PRE", 2: "ACC"},
+    "RTO": {1: "PRE", 2: "ACC"},
+    "CTU": {1: "PRE", 2: "ACC"},
+    "CTD": {1: "PRE", 2: "ACC"},
+}
 
 
 class OperandResolver:
@@ -66,6 +76,7 @@ class OperandResolver:
         self._project = project
         self._include_values = include_values
         self._cache: dict[str, dict[str, Any] | None] = {}
+        self._type_descs: dict[str, str] = {}
         self.values_shown = False
 
         if container_kind == "program":
@@ -92,8 +103,9 @@ class OperandResolver:
             operand: Operand text as written in the logic, e.g. ``"seq.fault.0"``.
 
         Returns:
-            A compact dict with any of the keys ``desc``, ``type``, ``tag_desc``,
-            ``alias_for``, ``const``, ``value``, ``scope`` and ``indexed``.
+            A compact dict with any of the keys ``desc``, ``type``,
+            ``tag_desc``, ``type_desc``, ``alias_for``, ``const``, ``value``, ``scope``
+            and ``indexed``.
         """
         if operand not in self._cache:
             self._cache[operand] = self._describe(operand)
@@ -107,13 +119,18 @@ class OperandResolver:
 
         Returns:
             ``{operand text: entry}`` in first-seen order, omitting operands
-            that are not tags.
+            that are not tags. With ``include_values``, ``?`` placeholders of
+            the instructions in :data:`PLACEHOLDER_MEMBERS` add
+            ``<tag>.PRE`` / ``<tag>.ACC`` entries.
 
         Raises:
             ValueError: If the rung text is malformed (see
                 :func:`l5x_mcp.operands.parse_rll`).
         """
-        return self._map(extract_rll_operands(text))
+        candidates = extract_rll_operands(text)
+        if self._include_values:
+            candidates.extend(_placeholder_operands(text))
+        return self._map(candidates)
 
     def operands_for_st_lines(self, lines: list[str]) -> dict[str, dict[str, Any]]:
         """Return the operands map of ST lines.
@@ -198,6 +215,8 @@ class OperandResolver:
         }
         if is_path and not own_desc:
             entry["tag_desc"] = base_desc
+        if not own_desc and not (is_path and base_desc):
+            entry["type_desc"] = self._type_desc(target.tag)
         if resolved.alias_chain:
             entry["alias_for"] = (
                 target.path if target is not resolved else resolved.alias_chain[-1]
@@ -217,6 +236,40 @@ class OperandResolver:
             entry["value"] = scalar
             self.values_shown = True
         return entry
+
+    def _type_desc(self, tag: Any) -> str:
+        """First line of the description of the base tag's UDT or AOI type."""
+        type_name = getattr(tag, "data_type", None)
+        if not type_name:
+            return ""
+        if type_name not in self._type_descs:
+            desc = ""
+            for collection in (
+                self._project.data_types,
+                self._project.aois,
+                self._project.protected_aois,
+            ):
+                try:
+                    definition = lookup(collection, type_name, "Type")
+                except L5XError:
+                    continue
+                desc = first_line(getattr(definition, "description", None))
+                break
+            self._type_descs[type_name] = desc
+        return self._type_descs[type_name]
+
+
+def _placeholder_operands(text: str) -> list[str]:
+    """Return ``<tag>.PRE``/``.ACC`` operands for ``?`` args of timers/counters."""
+    found: list[str] = []
+    for call in parse_rll(text):
+        members = PLACEHOLDER_MEMBERS.get(call.name.upper())
+        if not members or not call.args:
+            continue
+        for index, member in members.items():
+            if index < len(call.args) and call.args[index] == "?":
+                found.append(f"{call.args[0]}.{member}")
+    return found
 
 
 def _has_runtime_index(segments: Sequence[Any]) -> bool:

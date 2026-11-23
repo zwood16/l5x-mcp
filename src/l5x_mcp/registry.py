@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from py_l5x import load
 from py_l5x.parsers.project import Project
@@ -77,6 +78,68 @@ def lookup[T](collection: Mapping[str, T], name: str, kind: str) -> T:
         available_str = ", ".join(available[:50]) + f", ... ({more} more)"
 
     raise ItemNotFoundError(f"{kind} '{name}' not found. Available: {available_str}")
+
+
+def protected_aoi_name(project: Any, name: str) -> str | None:
+    """Return the canonical name of the source-protected AOI *name*, if any."""
+    lowered = name.lower()
+    for key in project.protected_aois:
+        if key.lower() == lowered:
+            return key
+    return None
+
+
+def lookup_aoi(project: Any, name: str, action: str = "used") -> Any:
+    """Look up an AOI definition; refuse source-protected AOIs clearly.
+
+    Args:
+        project: The py_l5x project.
+        name: AOI name (case-insensitive).
+        action: Past participle of what was attempted ("exported").
+
+    Returns:
+        The AOI definition.
+
+    Raises:
+        L5XError: If *name* is a source-protected AOI (it has no definition).
+        ItemNotFoundError: If there is no such AOI.
+    """
+    if name not in project.aois:
+        protected = protected_aoi_name(project, name)
+        if protected is not None and not any(
+            k.lower() == name.lower() for k in project.aois
+        ):
+            raise L5XError(
+                f"AOI '{protected}' is source-protected (its definition and "
+                f"logic are not in the file); it cannot be {action}."
+            )
+    return lookup(project.aois, name, "AOI")
+
+
+def lookup_routine(program: Any, name: str, action: str = "used") -> Any:
+    """Look up a readable routine of a program; refuse source-protected ones.
+
+    Args:
+        program: The py_l5x program.
+        name: Routine name (case-insensitive).
+        action: Past participle of what was attempted ("exported").
+
+    Returns:
+        The routine.
+
+    Raises:
+        L5XError: If *name* is a source-protected routine (logic is encoded).
+        ItemNotFoundError: If there is no such routine.
+    """
+    lowered = name.lower()
+    if not any(k.lower() == lowered for k in program.routines):
+        for key in program.protected_routines:
+            if key.lower() == lowered:
+                raise L5XError(
+                    f"routine '{key}' is source-protected; its logic is encoded "
+                    f"and cannot be {action}."
+                )
+    return lookup(program.routines, name, "Routine")
 
 
 class ProjectRegistry:

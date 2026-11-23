@@ -18,14 +18,23 @@ valid for the target version.
 
 from __future__ import annotations
 
+import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Literal
 
-from py_l5x import ProgramSpec, loads
+from py_l5x import ProgramSpec, ProtectedContentWarning, loads
 from py_l5x.parsers.project import Project
 
 from l5x_mcp.editing import edit_errors, load_fresh, resolve_output, write_project
-from l5x_mcp.registry import L5XError, ProjectRegistry, lookup
+from l5x_mcp.registry import (
+    L5XError,
+    ProjectRegistry,
+    lookup,
+    lookup_aoi,
+    lookup_routine,
+)
 from l5x_mcp.specs import (
     AOISpecDict,
     DataTypeSpecDict,
@@ -36,6 +45,7 @@ from l5x_mcp.specs import (
     to_py_spec,
 )
 from l5x_mcp.tools.edit_tags import (
+    _add_tag_spec,
     check_spec_aliases,
     scope_collection,
     with_warnings,
@@ -61,6 +71,30 @@ _IMPORT_HINT = (
     "Import it in Studio 5000 with Import Component (or the matching "
     "right-click Import on the Controller Organizer folder)."
 )
+
+
+@contextmanager
+def _protected_warnings() -> Iterator[list[str]]:
+    """Collect the messages of ``ProtectedContentWarning`` raised by an export.
+
+    Other warnings are left to the normal machinery (they are re-emitted).
+
+    Yields:
+        A list that holds the de-duplicated messages after the block ends.
+    """
+    messages: list[str] = []
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        yield messages
+    for item in caught:
+        if issubclass(item.category, ProtectedContentWarning):
+            text = str(item.message)
+            if text not in messages:
+                messages.append(text)
+        else:
+            warnings.warn_explicit(
+                item.message, item.category, item.filename, item.lineno
+            )
 
 
 def _context(registry: ProjectRegistry, context_path: str | None) -> Project:
@@ -110,7 +144,11 @@ def _write(
     out: Path,
     source: str | None,
     summary: dict[str, Any],
+    protected: list[str] | None = None,
 ) -> dict[str, Any]:
+    if protected:
+        merged = list(dict.fromkeys([*summary.get("warnings", []), *protected]))
+        summary = with_warnings(summary, merged)
     write_project(registry, component, out)
     result: dict[str, Any] = {"file": registry.relpath(out)}
     if source:
@@ -139,6 +177,8 @@ def _context_summary(component: Project) -> dict[str, list[str]]:
     }
     for key, items in groups.items():
         names = [i.name for i in items if getattr(i, "use", None) != "Target"]
+        if key == "aois":
+            names += [f"{n} (protected)" for n in component.protected_aois]
         if names:
             out[key] = names
     modules = list(component.modules)
@@ -148,7 +188,10 @@ def _context_summary(component: Project) -> dict[str, list[str]]:
 
 
 def _check_aliases(
-    project: Project, specs: list[Any], context_path: str | None
+    project: Project,
+    specs: list[Any],
+    context_path: str | None,
+    scope: str = "controller",
 ) -> list[str]:
     """Check alias targets of new tags against the same list and the context.
 
@@ -156,7 +199,7 @@ def _check_aliases(
         Warnings for targets whose members could not be verified.
     """
     try:
-        return check_spec_aliases(project, specs)
+        return check_spec_aliases(project, specs, scope)
     except L5XError as exc:
         if context_path:
             raise
@@ -172,6 +215,48 @@ def _check_free(collection: Any, name: str, kind: str) -> None:
             f"{kind} {name!r} already exists in the context project; "
             "use export_component for existing objects or choose another name"
         )
+
+
+def _add_program_tags(
+    prog: Any, tags: list[TagSpecDict], project: Project, context_path: str | None
+) -> tuple[list[Any], list[str]]:
+    """Add new program tags to the host program of a component.
+
+    Args:
+        prog: The host program (of ``project``).
+        tags: Tag specs from the tool call.
+        project: The context project, edited in memory only.
+        context_path: The tool's ``context_path`` (for the alias error hint).
+
+    Returns:
+        The py_l5x tag specs and the alias warnings.
+    """
+    specs = [to_py_spec("tag", t) for t in tags]
+    for spec in specs:
+        _check_free(prog.tags, spec.name, "Program tag")
+    warnings = _check_aliases(project, specs, context_path, prog.name)
+    for spec in specs:
+        with edit_errors(f"tag {spec.name!r}"):
+            _add_tag_spec(prog.tags, spec)
+    return specs, warnings
+
+
+def _unreferenced_warning(component: Project, prog_name: str, specs: list[Any]) -> list:
+    """Warn about new program tags that the export left out of the file.
+
+    py_l5x carries a program tag as context only when the logic (or an alias of
+    a carried tag) references it.
+    """
+    program = component.programs.get(prog_name)
+    carried = {name.lower() for name in program.tags} if program is not None else set()
+    missing = [s.name for s in specs if s.name.lower() not in carried]
+    if not missing:
+        return []
+    return [
+        f"Tags not referenced by the logic are not carried in the file: "
+        f"{', '.join(missing)}. Reference them in the logic, or create them "
+        "with create_tags_file(program=...)."
+    ]
 
 
 # ----------------------------------------------------------------------
@@ -230,7 +315,7 @@ def export_component(
         if not (program and routine and rungs):
             raise L5XError("kind='rungs' needs program, routine and rungs")
         prog = lookup(project.programs, program, "Program")
-        rtn = lookup(prog.routines, routine, "Routine")
+        rtn = lookup_routine(prog, routine, "exported")
         all_rungs = rtn.rungs
         bad = [n for n in rungs if not 0 <= n < len(all_rungs)]
         if bad:
@@ -243,21 +328,21 @@ def export_component(
         if kind == "data_type":
             targets = [lookup(project.data_types, n, "Data type") for n in names]
         elif kind == "aoi":
-            targets = [lookup(project.aois, n, "AOI") for n in names]
+            targets = [lookup_aoi(project, n, "exported") for n in names]
         elif kind == "program":
             targets = [lookup(project.programs, n, "Program") for n in names]
         elif kind == "routine":
             if not program:
                 raise L5XError("program is required for kind='routine'")
             prog = lookup(project.programs, program, "Program")
-            targets = [lookup(prog.routines, n, "Routine") for n in names]
+            targets = [lookup_routine(prog, n, "exported") for n in names]
         elif kind == "tags":
             _, collection = scope_collection(project, program or "controller")
             targets = [lookup(collection, n, "Tag") for n in names]
         else:
             raise L5XError(f"unknown kind {kind!r}")
         labels = [t.name for t in targets]
-    with edit_errors(f"export {kind}"):
+    with _protected_warnings() as protected, edit_errors(f"export {kind}"):
         component = project.export(targets)
     return _write(
         registry,
@@ -265,6 +350,7 @@ def export_component(
         out,
         str(source),
         {"targets": labels},
+        protected,
     )
 
 
@@ -305,7 +391,7 @@ def create_data_type_file(
     py_spec = to_py_spec("data_type", spec)
     project = _context(registry, context_path)
     _check_free(project.data_types, py_spec.name, "Data type")
-    with edit_errors(f"data type {py_spec.name!r}"):
+    with _protected_warnings() as protected, edit_errors(f"data type {py_spec.name!r}"):
         component = project.export(py_spec)
     return _write(
         registry,
@@ -313,6 +399,7 @@ def create_data_type_file(
         out,
         context_path,
         {"targets": [py_spec.name]},
+        protected,
     )
 
 
@@ -349,7 +436,7 @@ def create_aoi_file(
     py_spec = to_py_spec("aoi", spec)
     project = _context(registry, context_path)
     _check_free(project.aois, py_spec.name, "AOI")
-    with edit_errors(f"AOI {py_spec.name!r}"):
+    with _protected_warnings() as protected, edit_errors(f"AOI {py_spec.name!r}"):
         component = project.export(py_spec)
     return _write(
         registry,
@@ -357,6 +444,7 @@ def create_aoi_file(
         out,
         context_path,
         {"targets": [py_spec.name]},
+        protected,
     )
 
 
@@ -395,7 +483,7 @@ def create_program_file(
     project = _context(registry, context_path)
     _check_free(project.programs, py_spec.name, "Program")
     warnings = _check_aliases(project, py_spec.tags, context_path)
-    with edit_errors(f"program {py_spec.name!r}"):
+    with _protected_warnings() as protected, edit_errors(f"program {py_spec.name!r}"):
         component = project.export(py_spec)
     return _write(
         registry,
@@ -403,6 +491,7 @@ def create_program_file(
         out,
         context_path,
         with_warnings({"targets": [py_spec.name]}, warnings),
+        protected,
     )
 
 
@@ -412,12 +501,20 @@ def create_tags_file(
     output_path: str,
     context_path: str | None = None,
     overwrite: bool = False,
+    program: str | None = None,
 ) -> dict[str, Any]:
     """Create an import file for new controller tags (no project is modified).
 
     Each spec needs data_type (base tag) or alias_for (alias); value sets the
     initial value. UDTs/AOIs used by the tags are taken from context_path and
     included in the file.
+
+    program: create program tags of that program instead of controller tags;
+    the file is then a program-scope tag component (the shape of
+    export_component(kind="tags", program=...)). Tag-only component files
+    import through the Logix Designer SDK (partial import, verified). For the
+    Studio GUI, prefer carrying new tags inside a routine/rungs file via the
+    `tags` parameter of create_routine_file / create_rungs_file.
 
     Without context_path the file has a v37 header, which Studio ignores
     (imports into v33+ verified); use instructions valid for the target version.
@@ -429,6 +526,7 @@ def create_tags_file(
             folder; a path is root-relative). Must not be the source.
         context_path: Optional project whose UDTs/AOIs the tags use.
         overwrite: Replace output_path if this server wrote it earlier in this session.
+        program: Program whose program tags to create (None for controller tags).
 
     Returns:
         Dict with file, target_type, targets and context, plus warnings (alias
@@ -437,12 +535,27 @@ def create_tags_file(
     out = _output(registry, output_path, context_path, overwrite)
     if not tags:
         raise L5XError("tags must contain at least one tag spec")
-    specs = [to_py_spec("tag", t) for t in tags]
     project = _context(registry, context_path)
+    if program:
+        prog = _host_program(project, program)
+        specs, warnings = _add_program_tags(prog, tags, project, context_path)
+        with _protected_warnings() as protected, edit_errors("tags"):
+            component = project.export([prog.tags[s.name] for s in specs])
+        return _write(
+            registry,
+            component,
+            out,
+            context_path,
+            with_warnings(
+                {"targets": [f"{prog.name}/{s.name}" for s in specs]}, warnings
+            ),
+            protected,
+        )
+    specs = [to_py_spec("tag", t) for t in tags]
     for spec in specs:
         _check_free(project.controller_tags, spec.name, "Controller tag")
     warnings = _check_aliases(project, specs, context_path)
-    with edit_errors("tags"):
+    with _protected_warnings() as protected, edit_errors("tags"):
         component = project.export(specs)
     return _write(
         registry,
@@ -450,6 +563,7 @@ def create_tags_file(
         out,
         context_path,
         with_warnings({"targets": [s.name for s in specs]}, warnings),
+        protected,
     )
 
 
@@ -469,6 +583,7 @@ def create_routine_file(
     output_path: str,
     context_path: str | None = None,
     overwrite: bool = False,
+    tags: list[TagSpecDict] | None = None,
 ) -> dict[str, Any]:
     """Create an import file for a new routine in a program (no project is modified).
 
@@ -476,6 +591,12 @@ def create_routine_file(
     project). An RLL routine takes rungs ([{text, comment?}]); an ST routine
     takes lines. Tags of context_path used by the logic (program tags of
     program first, then controller tags) and their types are included.
+
+    tags: this is the way to add NEW program tags for the logic. They are
+    created in the program before export and carried in the file as context,
+    so Studio creates them on import. Only tags the logic references are
+    carried; unreferenced ones are reported in warnings. Types they use (UDTs,
+    AOIs) are included.
 
     Without context_path the file has a v37 header, which Studio ignores
     (imports into v33+ verified); use instructions valid for the target version.
@@ -488,9 +609,13 @@ def create_routine_file(
             folder; a path is root-relative). Must not be the source.
         context_path: Optional project with the tags/types the logic uses.
         overwrite: Replace output_path if this server wrote it earlier in this session.
+        tags: New program tags (of program) for the logic to use. Names must
+            not already exist in that program.
 
     Returns:
-        Dict with file, target_type, targets and context.
+        Dict with file, target_type, targets and context, plus warnings (alias
+        targets that could not be fully checked, new tags the logic does not
+        reference), when any.
     """
     out = _output(registry, output_path, context_path, overwrite)
     spec = to_py_spec("routine", routine)
@@ -501,19 +626,25 @@ def create_routine_file(
     project = _context(registry, context_path)
     prog = _host_program(project, program)
     _check_free(prog.routines, spec.name, "Routine")
+    new_specs, warnings = (
+        _add_program_tags(prog, tags, project, context_path) if tags else ([], [])
+    )
     with edit_errors(f"routine {spec.name!r}"):
         new = prog.routines.add(spec.name, spec.type_, description=spec.description)
         for rung in spec.rungs:
             new.add_rung(rung.text, rung.comment or None)
         if spec.lines:
             new.set_st_lines(spec.lines)
-        component = project.export(new)
+        with _protected_warnings() as protected:
+            component = project.export(new)
+    warnings += _unreferenced_warning(component, prog.name, new_specs)
     return _write(
         registry,
         component,
         out,
         context_path,
-        {"targets": [f"{prog.name}/{spec.name}"]},
+        with_warnings({"targets": [f"{prog.name}/{spec.name}"]}, warnings),
+        protected,
     )
 
 
@@ -525,6 +656,7 @@ def create_rungs_file(
     output_path: str,
     context_path: str | None = None,
     overwrite: bool = False,
+    tags: list[TagSpecDict] | None = None,
 ) -> dict[str, Any]:
     """Create an import file of new ladder rungs (no project is modified).
 
@@ -532,6 +664,12 @@ def create_rungs_file(
     right-click a rung > Import Rungs). Tags of context_path used by the
     rungs (program tags of program first, then controller tags) and their
     types are included, so missing tags are created on import.
+
+    tags: this is the way to add NEW program tags for the rungs. They are
+    created in the program before export and carried in the file as context,
+    so Studio creates them on import. Only tags the rungs reference are
+    carried; unreferenced ones are reported in warnings. Types they use (UDTs,
+    AOIs) are included.
 
     Without context_path the file has a v37 header, which Studio ignores
     (imports into v33+ verified); use instructions valid for the target version.
@@ -545,9 +683,13 @@ def create_rungs_file(
             folder; a path is root-relative). Must not be the source.
         context_path: Optional project with the tags/types the rungs use.
         overwrite: Replace output_path if this server wrote it earlier in this session.
+        tags: New program tags (of program) for the rungs to use. Names must
+            not already exist in that program.
 
     Returns:
-        Dict with file, target_type, targets (rung count) and context.
+        Dict with file, target_type, targets (rung count) and context, plus
+        warnings (alias targets that could not be fully checked, new tags the
+        rungs do not reference), when any.
     """
     out = _output(registry, output_path, context_path, overwrite)
     if not rungs:
@@ -555,17 +697,25 @@ def create_rungs_file(
     project = _context(registry, context_path)
     prog = _host_program(project, program)
     existing = {k.lower(): v for k, v in prog.routines.items()}
+    new_specs, warnings = (
+        _add_program_tags(prog, tags, project, context_path) if tags else ([], [])
+    )
     with edit_errors(f"routine {routine!r}"):
         rtn = existing.get(routine.lower()) or prog.routines.add(routine, "RLL")
         start = len(rtn.rungs)
         for rung in rungs:
             spec = to_py_spec("routine", {"name": "x", "rungs": [rung]}).rungs[0]
             rtn.add_rung(spec.text, spec.comment or None)
-        component = project.export(rtn.rungs[start:])
+        with _protected_warnings() as protected:
+            component = project.export(rtn.rungs[start:])
+    warnings += _unreferenced_warning(component, prog.name, new_specs)
     return _write(
         registry,
         component,
         out,
         context_path,
-        {"targets": [f"{prog.name}/{rtn.name}: {len(rungs)} rungs"]},
+        with_warnings(
+            {"targets": [f"{prog.name}/{rtn.name}: {len(rungs)} rungs"]}, warnings
+        ),
+        protected,
     )

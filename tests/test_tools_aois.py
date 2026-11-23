@@ -484,3 +484,55 @@ class TestGetAOILogicBudget:
                 max_chars=max_chars,
                 path="example.L5X",
             )
+
+
+PROTECTED = "example.L5X"
+
+
+class TestProtectedAois:
+    """The source-protected AOI SeqCtrl_Protected (EncodedData) in example.L5X."""
+
+    def test_list_aois_flags_protected(self, registry):
+        result = list_aois(registry, path=PROTECTED)
+        by_name = {a["name"]: a for a in result["aois"]}
+        assert by_name["SeqCtrl_Protected"] == {
+            "name": "SeqCtrl_Protected",
+            "protected": True,
+            "revision": "3.3",
+            "parameter_count": 34,
+        }
+        # The readable SeqCtrl is a normal AOI.
+        assert "protected" not in by_name["SeqCtrl"]
+        assert "routines" in by_name["SeqCtrl"]
+
+    def test_get_aoi_protected_renders_parameters(self, registry):
+        result = get_aoi(registry, "seqctrl_protected", path=PROTECTED)
+        assert result["protected"] is True
+        assert result["revision"] == "3.3"
+        assert result["class"] == "Standard"
+        assert result["signature_id"]
+        assert result["software_revision"] == "v37.00"
+        assert "edited_date" in result
+        assert len(result["parameters"]) == 34
+        param = next(p for p in result["parameters"] if p["name"] == "autoModeOverride")
+        assert param["data_type"] == "BOOL"
+        assert param["usage"] == "Output"
+        assert param["description"].startswith("Optional bit to externally")
+        enable_in = next(p for p in result["parameters"] if p["name"] == "EnableIn")
+        assert enable_in["visible"] is False
+        assert "source-protected" in result["note"]
+        assert "routines" not in result
+        assert "local_tags" not in result
+
+    def test_get_aoi_protected_include_logic_gives_no_logic(self, registry):
+        result = get_aoi(
+            registry, "SeqCtrl_Protected", include_logic=True, path=PROTECTED
+        )
+        assert "logic" not in result
+        assert "not readable" in result["note"]
+
+    def test_get_aoi_protected_parameters_match_normal_serialization(self, registry):
+        """Protected parameters use the same fields as a normal AOI's."""
+        normal = get_aoi(registry, "SeqCtrl", path=PROTECTED)["parameters"]
+        protected = get_aoi(registry, "SeqCtrl_Protected", path=PROTECTED)["parameters"]
+        assert set(protected[0]) <= set().union(*(p.keys() for p in normal))

@@ -367,6 +367,111 @@ class TestCreateComponents:
         assert component.target_type == "Rung"
         assert component.target.comment == "x"
 
+    def test_routine_file_carries_new_program_tag(self, editable):
+        result = create_routine_file(
+            editable,
+            program="MainProgram",
+            routine={
+                "name": "CompRtn",
+                "type": "RLL",
+                "rungs": [{"text": "XIC(an_int)OTE(NewBit);"}],
+            },
+            tags=[{"name": "NewBit", "data_type": "BOOL"}],
+            context_path=EXAMPLE,
+            output_path="rtn.L5X",
+        )
+
+        component = _load(editable, OUT + "rtn.L5X")
+        assert "NewBit" in component.programs["MainProgram"].tags
+        assert "warnings" not in result
+
+    def test_routine_file_unreferenced_new_tag_warns(self, editable):
+        result = create_routine_file(
+            editable,
+            program="MainProgram",
+            routine={
+                "name": "CompRtn",
+                "type": "RLL",
+                "rungs": [{"text": "XIC(an_int)OTE(NewBit);"}],
+            },
+            tags=[
+                {"name": "NewBit", "data_type": "BOOL"},
+                {"name": "Unused", "data_type": "DINT"},
+            ],
+            context_path=EXAMPLE,
+            output_path="rtn.L5X",
+        )
+
+        component = _load(editable, OUT + "rtn.L5X")
+        assert "Unused" not in component.programs["MainProgram"].tags
+        assert len(result["warnings"]) == 1
+        assert "Unused" in result["warnings"][0]
+        assert "NewBit" not in result["warnings"][0]
+
+    def test_routine_file_new_tag_name_must_be_free(self, editable):
+        with pytest.raises(L5XError, match="already exists"):
+            create_routine_file(
+                editable,
+                program="MainProgram",
+                routine={"name": "CompRtn", "type": "RLL"},
+                tags=[{"name": "an_int", "data_type": "DINT"}],
+                context_path=EXAMPLE,
+                output_path="rtn.L5X",
+            )
+        assert not (editable.root / OUT_DIR / "rtn.L5X").exists()
+
+    def test_rungs_file_carries_new_program_tag_and_type(self, editable):
+        create_rungs_file(
+            editable,
+            program="MainProgram",
+            routine="MainRoutine",
+            rungs=[{"text": "XIC(an_int)OTE(NewSeq.fault);"}],
+            tags=[{"name": "NewSeq", "data_type": "SeqCtrl"}],
+            context_path=EXAMPLE,
+            output_path="rungs.L5X",
+        )
+
+        component = _load(editable, OUT + "rungs.L5X")
+        assert "NewSeq" in component.programs["MainProgram"].tags
+        assert "SeqCtrl" in component.aois
+
+    def test_rungs_file_without_tags_is_unchanged(self, editable):
+        result = create_rungs_file(
+            editable,
+            program="MainProgram",
+            routine="MainRoutine",
+            rungs=[{"text": "XIC(an_int)OTE(an_int_out);"}],
+            context_path=EXAMPLE,
+            output_path="rungs.L5X",
+        )
+        assert "warnings" not in result
+
+    def test_tags_file_program_scope(self, editable):
+        result = create_tags_file(
+            editable,
+            tags=[{"name": "NewTag", "data_type": "DINT", "value": 4}],
+            program="SafetyProgram",
+            context_path=EXAMPLE,
+            output_path="ptags.L5X",
+        )
+
+        component = _load(editable, OUT + "ptags.L5X")
+        assert result["target_type"] == "Tag"
+        assert result["targets"] == ["SafetyProgram/NewTag"]
+        assert component.target.name == "NewTag"
+        assert component.programs["SafetyProgram"].tags["NewTag"].value == 4
+        assert "NewTag" not in component.controller_tags
+
+    def test_tags_file_program_tag_name_must_be_free(self, editable):
+        with pytest.raises(L5XError, match="already exists"):
+            create_tags_file(
+                editable,
+                tags=[{"name": "input_ok", "data_type": "BOOL"}],
+                program="SafetyProgram",
+                context_path=EXAMPLE,
+                output_path="ptags.L5X",
+            )
+
     def test_context_project_is_never_modified(self, editable):
         before = (editable.root / EXAMPLE).read_bytes()
 
@@ -392,3 +497,100 @@ class TestCreateComponents:
             )
 
         assert (editable.root / EXAMPLE).read_bytes() == before
+
+
+PROTECTED = "example.L5X"
+AOI_WARNING = "AOI 'SeqCtrl_Protected' is source-protected; its encoded definition"
+ROUTINE_WARNING = (
+    "routine 'SequenceRoutine_Protected' is source-protected; tags and AOIs it "
+    "uses could not be determined and are not included as context"
+)
+
+
+class TestProtectedComponents:
+    def test_create_routine_file_copies_encoded_aoi_with_warning(self, editable):
+        result = create_routine_file(
+            editable,
+            program="AnotherProgram",
+            routine={
+                "name": "CompRtn",
+                "type": "RLL",
+                "rungs": [
+                    {
+                        "text": (
+                            "XIC(TestInput)MOVE(5,seqCtrl_Protected_Instance.nextStep);"
+                        )
+                    }
+                ],
+            },
+            context_path=PROTECTED,
+            output_path="rtn.L5X",
+        )
+
+        component = _load(editable, OUT + "rtn.L5X")
+        assert "SeqCtrl_Protected" in component.protected_aois
+        assert len(result["warnings"]) == 1
+        assert result["warnings"][0].startswith(AOI_WARNING)
+        assert "SeqCtrl_Protected (protected)" in result["context"]["aois"]
+
+    def test_export_routine_copies_encoded_aoi_with_warning(self, editable):
+        result = export_component(
+            editable,
+            kind="routine",
+            program="AnotherProgram",
+            names=["Main"],
+            output_path="routine.L5X",
+            path=PROTECTED,
+        )
+
+        assert (
+            "SeqCtrl_Protected" in _load(editable, OUT + "routine.L5X").protected_aois
+        )
+        assert [w[: len(AOI_WARNING)] for w in result["warnings"]] == [AOI_WARNING]
+
+    def test_export_program_with_protected_routine_gives_both_warnings(self, editable):
+        result = export_component(
+            editable,
+            kind="program",
+            names=["AnotherProgram"],
+            output_path="prog.L5X",
+            path=PROTECTED,
+        )
+
+        assert ROUTINE_WARNING in result["warnings"]
+        assert any(w.startswith(AOI_WARNING) for w in result["warnings"])
+        assert len(result["warnings"]) == 2
+
+    def test_export_protected_aoi_is_refused(self, editable):
+        with pytest.raises(L5XError, match="source-protected.*cannot be exported"):
+            export_component(
+                editable,
+                kind="aoi",
+                names=["seqctrl_protected"],
+                output_path="aoi.L5X",
+                path=PROTECTED,
+            )
+        assert not (editable.root / OUT_DIR / "aoi.L5X").exists()
+
+    def test_export_protected_routine_is_refused(self, editable):
+        with pytest.raises(L5XError, match="source-protected.*cannot be exported"):
+            export_component(
+                editable,
+                kind="routine",
+                program="AnotherProgram",
+                names=["SequenceRoutine_Protected"],
+                output_path="r.L5X",
+                path=PROTECTED,
+            )
+        assert not (editable.root / OUT_DIR / "r.L5X").exists()
+
+    def test_no_warning_without_protected_content(self, editable):
+        result = export_component(
+            editable,
+            kind="routine",
+            program="MainProgram",
+            names=["SequenceRoutine"],
+            output_path="routine.L5X",
+            path=EXAMPLE,
+        )
+        assert "warnings" not in result

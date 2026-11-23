@@ -11,7 +11,13 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from l5x_mcp.editing import Edit, edit_errors
-from l5x_mcp.registry import L5XError, ProjectRegistry, lookup
+from l5x_mcp.registry import (
+    L5XError,
+    ProjectRegistry,
+    lookup,
+    lookup_aoi,
+    lookup_routine,
+)
 from l5x_mcp.specs import (
     AOISpecDict,
     DataTypeSpecDict,
@@ -85,7 +91,7 @@ def get_spec(
         if kind == "data_type":
             spec = lookup(project.data_types, name, "Data type").to_spec()
         elif kind == "aoi":
-            spec = lookup(project.aois, name, "AOI").to_spec()
+            spec = lookup_aoi(project, name, "exported as a spec").to_spec()
         elif kind == "program":
             spec = lookup(project.programs, name, "Program").to_spec()
         elif kind == "tag":
@@ -95,7 +101,7 @@ def get_spec(
             if not program:
                 raise L5XError("program is required for kind='routine'")
             prog = lookup(project.programs, program, "Program")
-            spec = lookup(prog.routines, name, "Routine").to_spec()
+            spec = lookup_routine(prog, name, "exported as a spec").to_spec()
         else:
             raise L5XError(f"unknown kind {kind!r}")
     data = from_py_spec(spec)
@@ -319,7 +325,7 @@ def replace_aoi(
     """
     py_spec = to_py_spec("aoi", spec)
     edit = Edit.open(registry, path, output_path, overwrite)
-    py_spec.name = lookup(edit.project.aois, py_spec.name, "AOI").name
+    py_spec.name = lookup_aoi(edit.project, py_spec.name, "replaced").name
     with edit_errors(f"AOI {py_spec.name!r}"):
         edit.project.aois.replace(
             py_spec, allow_signature_change=allow_signature_change
@@ -351,7 +357,7 @@ def rename_aoi(
         rewritten).
     """
     edit = Edit.open(registry, path, output_path, overwrite)
-    old = lookup(edit.project.aois, name, "AOI").name
+    old = lookup_aoi(edit.project, name, "renamed").name
     with edit_errors(f"rename AOI {old!r}"):
         calls = len(edit.project.aois.call_sites(old))
         edit.project.aois.rename(old, new_name)
@@ -384,7 +390,7 @@ def remove_aoi(
         Dict with file, source and removed.
     """
     edit = Edit.open(registry, path, output_path, overwrite)
-    old = lookup(edit.project.aois, name, "AOI").name
+    old = lookup_aoi(edit.project, name, "removed").name
     with edit_errors(f"remove AOI {old!r}"):
         edit.project.aois.remove(old, force=force)
     return edit.save({"removed": old})
@@ -632,13 +638,13 @@ def set_description(
     elif kind == "routine":
         if not program:
             raise L5XError("program is required for kind='routine'")
-        obj = lookup(
-            lookup(project.programs, program, "Program").routines, name, "Routine"
+        obj = lookup_routine(
+            lookup(project.programs, program, "Program"), name, "edited"
         )
     elif kind == "data_type":
         obj = lookup(project.data_types, name, "Data type")
     elif kind == "aoi":
-        obj = lookup(project.aois, name, "AOI")
+        obj = lookup_aoi(project, name, "edited")
     else:
         raise L5XError(f"unknown kind {kind!r}")
     with edit_errors(f"{kind} {obj.name!r}"):

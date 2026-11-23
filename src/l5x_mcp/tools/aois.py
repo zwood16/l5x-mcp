@@ -13,7 +13,7 @@ from typing import Any
 from py_l5x import AOIParameter, BoolNode, FloatNode, IntegerNode, TagNode
 from py_l5x.parsers.routine import Routine
 
-from l5x_mcp.registry import ProjectRegistry, lookup
+from l5x_mcp.registry import ProjectRegistry, lookup, protected_aoi_name
 from l5x_mcp.serialize import compact, first_line, tag_summary
 from l5x_mcp.tools.programs import (
     MAX_CHARS_DEFAULT,
@@ -27,7 +27,8 @@ def list_aois(registry: ProjectRegistry, path: str | None = None) -> dict[str, A
     """List all Add-On Instructions in a project with basic metadata.
 
     Returns name, revision, description (first line), parameter_count,
-    and routine names.
+    and routine names. Source-protected AOIs (definition and logic not in the
+    file) are listed with protected=true, parameter_count and their metadata.
 
     Args:
         registry: ProjectRegistry to load from.
@@ -40,6 +41,8 @@ def list_aois(registry: ProjectRegistry, path: str | None = None) -> dict[str, A
         - description: First line of description, max 200 chars (omitted if empty).
         - parameter_count: Number of parameters.
         - routines: List of routine names.
+        Source-protected AOIs have name, protected (true), revision,
+        parameter_count and description (when the file shows them).
 
     Raises:
         L5XError: If the project cannot be loaded.
@@ -60,6 +63,16 @@ def list_aois(registry: ProjectRegistry, path: str | None = None) -> dict[str, A
         if desc:
             item["description"] = desc
 
+        aois_list.append(compact(item))
+
+    for protected in project.protected_aois.values():
+        item = {
+            "name": protected.name,
+            "protected": True,
+            "revision": protected.revision,
+            "parameter_count": len(protected.parameters),
+            "description": first_line(protected.description, 200),
+        }
         aois_list.append(compact(item))
 
     return {
@@ -156,6 +169,30 @@ def _logic_within_budget(
     return logic, []
 
 
+def _protected_aoi_result(file: str, aoi: Any) -> dict[str, Any]:
+    """Build the get_aoi result of a source-protected AOI."""
+    return compact(
+        {
+            "file": file,
+            "name": aoi.name,
+            "protected": True,
+            "description": aoi.description,
+            "revision": aoi.revision,
+            "vendor": aoi.vendor,
+            "class": aoi.class_,
+            "signature_id": aoi.signature_id,
+            "edited_date": aoi.edited_date,
+            "software_revision": aoi.software_revision,
+            "parameters": [_parameter_dict(p) for p in aoi.parameters.values()],
+            "dependencies": aoi.dependency_names,
+            "note": (
+                "source-protected: its local tags and logic are encoded and not "
+                "readable; parameters and tags of its type read normally."
+            ),
+        }
+    )
+
+
 def get_aoi(
     registry: ProjectRegistry,
     name: str,
@@ -167,6 +204,13 @@ def get_aoi(
 
     Returns AOI metadata, parameters, local tags, routines, call signature,
     and optionally the logic text of each routine.
+
+    A source-protected AOI (listed by list_aois with protected=true) has no
+    definition or logic in the file: the result is only name, protected,
+    revision/vendor/class, signature_id, edited_date, software_revision,
+    description, parameters (same fields as a normal AOI's) and dependencies
+    when the file shows them, plus a note. Its local tags and logic are encoded;
+    include_logic returns no logic for it.
 
     Args:
         registry: ProjectRegistry to load from.
@@ -229,6 +273,11 @@ def get_aoi(
     """
     validate_max_chars(max_chars)
     resolved_path, project = registry.get_with_path(path)
+
+    if name not in project.aois and (protected := protected_aoi_name(project, name)):
+        return _protected_aoi_result(
+            registry.relpath(resolved_path), project.protected_aois[protected]
+        )
 
     aoi = lookup(project.aois, name, "Add-On Instruction")
 

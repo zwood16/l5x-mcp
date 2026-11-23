@@ -125,13 +125,13 @@ class TestProjectOverview:
 
         counts = result["counts"]
         assert counts["data_types"] == 9
-        assert counts["aois"] == 6
+        assert counts["aois"] == 7  # includes protected SeqCtrl_Protected
         assert counts["modules"] == 17
         assert counts["controller_tags"] == 9
         assert counts["module_io_tags"] == 32  # Names containing ':' in project.tags
         assert counts["programs"] == 7
         assert counts["tasks"] == 4
-        assert counts["routines"] == 13  # Sum of routines across all programs
+        assert counts["routines"] == 14  # incl. protected SequenceRoutine_Protected
 
     def test_tasks_list_structure(self, registry):
         """Tasks list has correct structure and content."""
@@ -188,7 +188,7 @@ class TestProjectOverview:
         result = project_overview(registry, EXAMPLE)
 
         aois = result["aois"]
-        assert len(aois) == 6
+        assert len(aois) == 7
 
         # Check that we have Debounce and others
         aoi_names = {a.split(" v")[0] for a in aois}  # Strip off revision
@@ -360,3 +360,12 @@ class TestComponentExportOverview:
         assert result["counts"]["modules"] == 1
         assert result["counts"]["controller_tags"] == 0
         assert result["counts"]["module_io_tags"] == 3
+
+
+def test_overview_counts_and_marks_protected_aois_and_routines(registry):
+    """Source-protected AOIs are listed with a (protected) suffix; routines count."""
+    result = project_overview(registry, path=EXAMPLE)
+    assert "SeqCtrl_Protected v3.3 (protected)" in result["aois"]
+    assert "SeqCtrl v3.3" in result["aois"]
+    another = next(p for p in result["programs"] if p["name"] == "AnotherProgram")
+    assert another["routine_count"] == 4

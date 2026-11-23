@@ -700,3 +700,27 @@ def _reserved_registry(fixtures_dir, tmp_path):
         assert result["operand"] == "ALLOWABLE_ALARMS[idx+1]"
         assert result["node"]["kind"] == "string"
         assert "runtime index" in result["note"]
+
+
+class TestProtectedAoiTags:
+    """Tags of a source-protected AOI type read from the decorated data."""
+
+    def test_get_tag_has_members(self, registry):
+        result = get_tag(
+            registry,
+            "sequence",
+            scope="MainProgram",
+            path="example.L5X",
+        )
+        assert result["data_type"] == "SeqCtrl"
+        assert result["value_tree"]["members"]["mode"]["kind"] == "scalar"
+
+    def test_get_tag_member_path(self, registry):
+        result = get_tag(
+            registry,
+            "sequence.currentStep",
+            scope="MainProgram",
+            path="example.L5X",
+        )
+        assert result["node"]["data_type"] == "DINT"
+        assert result["node"]["value"] == 7000

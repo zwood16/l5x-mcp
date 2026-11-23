@@ -129,7 +129,8 @@ def project_overview(
         - unscheduled_programs: List of program names not in any task.
         - programs: List of dicts with name, main_routine, disabled (only if True),
                     routine_count, tag_count.
-        - aois: List of strings "Name vX.Y" with revision if available.
+        - aois: List of strings "Name vX.Y" with revision if available;
+          source-protected AOIs end with " (protected)" and are counted in counts.
         - data_types: List of data type names.
         - modules: List of dicts with name, catalog_number.
     """
@@ -157,7 +158,10 @@ def project_overview(
         )
 
     # Count routines across all programs
-    routine_count = sum(len(prog.routines) for prog in project.programs.values())
+    routine_count = sum(
+        len(prog.routines) + len(prog.protected_routines)
+        for prog in project.programs.values()
+    )
 
     # Count controller-scoped tags (module I/O tags are not counted here)
     controller_tags_count = len(project.controller_tags)
@@ -194,7 +198,7 @@ def project_overview(
                     "name": prog.name,
                     "main_routine": prog.main_routine_name,
                     "disabled": prog.disabled if prog.disabled else None,
-                    "routine_count": len(prog.routines),
+                    "routine_count": len(prog.routines) + len(prog.protected_routines),
                     "tag_count": len(prog.tags),
                 }
             )
@@ -212,6 +216,11 @@ def project_overview(
         if aoi.revision:
             aoi_str = f"{aoi_name} v{aoi.revision}"
         aois_list.append(aoi_str)
+    for aoi_name, protected in project.protected_aois.items():
+        aoi_str = (
+            f"{aoi_name} v{protected.revision}" if protected.revision else aoi_name
+        )
+        aois_list.append(f"{aoi_str} (protected)")
 
     # Build data types list
     data_types_list = list(project.data_types.keys())
@@ -237,7 +246,7 @@ def project_overview(
             "controller": controller_info,
             "counts": {
                 "data_types": len(project.data_types),
-                "aois": len(project.aois),
+                "aois": len(project.aois) + len(project.protected_aois),
                 "modules": len(project.modules),
                 "controller_tags": controller_tags_count,
                 "module_io_tags": module_io_tags_count,

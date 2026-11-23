@@ -10,7 +10,6 @@ from l5x_mcp.registry import ItemNotFoundError, ProjectRegistry
 from l5x_mcp.tools.modules import get_module, list_modules
 
 #: Expected tree text, derived from the fixture's real topology.
-#: ValveBank has no CatalogNumber in the fixture, so its brackets are omitted.
 EXPECTED_TREE = """\
 Local [5069-L310ERMS3] @ slot 0
   Test_Input_Module [5069-IB16/A] @ slot 1
@@ -18,7 +17,7 @@ Local [5069-L310ERMS3] @ slot 0
   Fast_Local_Input [5069-IB16F/A] @ slot 3
   ShopRobot [ETHERNET-MODULE] @ 192.168.0.3
   AnotherPLC [5069-L306ER] @ 192.168.1.4
-  ValveBank @ 192.168.1.5
+  ValveBank [EX600-SEN7/8] @ 192.168.1.5
   Test_Servo_Drive [2198-H003-ERS2] @ 192.168.1.6
   PointIO [1734-AENTR/B] @ 192.168.1.7
     PointIO_Input [1734-IB8/C] @ slot 1
@@ -95,9 +94,9 @@ class TestListModules:
         assert len(names) == len(EXPECTED_TAG_PREFIX)
 
     def test_tree_omits_empty_catalog_brackets(self, fixture_registry):
-        """A module with no catalog number is rendered without empty brackets."""
+        """No module renders empty brackets (every fixture module has a catalog)."""
         result = list_modules(fixture_registry, path="example.L5X")
-        assert "ValveBank @ 192.168.1.5" in result["tree"]
+        assert "ValveBank [EX600-SEN7/8] @ 192.168.1.5" in result["tree"]
         assert "[]" not in result["tree"]
 
     def test_remote_rack_nests_under_adapter(self, fixture_registry):

@@ -64,6 +64,30 @@ def _routine_type(routine: Routine) -> str:
     return ""
 
 
+def protected_routine_entries(program: Any) -> list[dict[str, Any]]:
+    """List the source-protected routines of a program, flagged and compact."""
+    return [
+        compact({"name": r.name, "type": r.type_, "protected": True})
+        for r in program.protected_routines.values()
+    ]
+
+
+def _protected_routine_name(
+    project: Project, container_kind: str, container_name: str, routine: str
+) -> str | None:
+    """Return the canonical name if *routine* is a protected routine, else None."""
+    if container_kind != "program":
+        return None
+    prog = project.programs[container_name]
+    lowered = routine.lower()
+    if routine in prog.routines or any(k.lower() == lowered for k in prog.routines):
+        return None
+    for key in prog.protected_routines:
+        if key.lower() == lowered:
+            return key
+    return None
+
+
 def _resolve_routine_container(
     project: Project, program: str | None, aoi: str | None
 ) -> tuple[str, str, RoutinesCollection]:
@@ -143,7 +167,7 @@ def list_programs(registry: ProjectRegistry, path: str | None = None) -> dict[st
             "name": prog.name,
             "description": first_line(prog.description),
             "main_routine": prog.main_routine_name or "",
-            "routine_count": len(prog.routines),
+            "routine_count": len(prog.routines) + len(prog.protected_routines),
             "tag_count": len(prog.tags),
         }
         if prog.disabled:
@@ -171,7 +195,8 @@ def get_program(
 
     Includes name, full description, main routine name, disabled/test_edits/
     use_as_folder/class flags, is_safety flag, scheduled task (if any),
-    list of routines (with type, description, rung/line counts), and tag_count.
+    list of routines (with type, description, rung/line counts; source-protected
+    ones are flagged protected=true), and tag_count.
 
     The per-tag list is omitted by default (it can be large); pass
     include_tags=True to add it, or use list_tags(scope=<program name>).
@@ -216,6 +241,7 @@ def get_program(
         elif routine_kind == "ST":
             routine_dict["line_count"] = len(routine.st_lines)
         routines_list.append(routine_dict)
+    routines_list.extend(protected_routine_entries(prog))
 
     result = {
         "file": registry.relpath(resolved_path),
@@ -252,6 +278,9 @@ def list_routines(
 ) -> dict[str, Any]:
     """List all routines in a program or AOI.
 
+    Source-protected routines are listed last with protected=true and their
+    type only; their logic cannot be read.
+
     Args:
         registry: ProjectRegistry to load from.
         program: Program name (case-insensitive), or None.
@@ -284,6 +313,10 @@ def list_routines(
         elif routine_kind == "ST":
             routine_dict["line_count"] = len(routine.st_lines)
         routines_list.append(routine_dict)
+    if container_kind == "program":
+        routines_list.extend(
+            protected_routine_entries(project.programs[container_name])
+        )
 
     return {
         "file": registry.relpath(resolved_path),
@@ -852,13 +885,16 @@ def get_routine_logic(
 
     operands (include_operands, default True; not in outline mode): a map from
     each operand written in the returned rungs/lines to its description: desc,
-    type, tag_desc (tag description when the member has none), alias_for,
-    const, value (constants), scope (when not the container's own tag), and
-    indexed. Each operand appears once, even if used in several rungs. The key
+    type, tag_desc (tag description when the member has none), type_desc
+    (first line of the operand's base data type (UDT/AOI) description, only
+    when the entry has neither desc nor tag_desc), alias_for, const, value
+    (constants), scope (when not the container's own tag), and indexed. Each
+    operand appears once, even if used in several rungs. The key
     is omitted when there are none. Rungs whose text cannot be parsed are listed
     in operands_unparsed. include_values adds current values of non-constant
     tags; these come from the offline snapshot in the export, not live data
-    (values_note says so).
+    (values_note says so). include_values also fills ? placeholders of
+    TON/TOF/RTO/CTU/CTD with <tag>.PRE/.ACC entries.
 
     max_chars (default 8000, range 1000-100000) bounds the compact JSON size of
     the whole response, including the description and operands. Items are added
@@ -898,7 +934,8 @@ def get_routine_logic(
         were omitted), and note.
 
     Raises:
-        L5XError: If detail or max_chars is invalid, include_values is given
+        L5XError: If the routine is source-protected, detail or max_chars is
+            invalid, include_values is given
             without include_operands, both/neither program and aoi are given,
             the range is invalid, etc.
         ItemNotFoundError: If routine/program/AOI not found.
@@ -914,6 +951,14 @@ def get_routine_logic(
         project, program, aoi
     )
 
+    protected = _protected_routine_name(
+        project, container_kind, container_name, routine
+    )
+    if protected is not None:
+        raise L5XError(
+            f"routine '{protected}' is source-protected; its logic is encoded "
+            "and cannot be read."
+        )
     rtn: Routine = lookup(routines_collection, routine, "Routine")
     routine_kind = _routine_type(rtn)
     start, end = _resolve_range(start_rung, end_rung)

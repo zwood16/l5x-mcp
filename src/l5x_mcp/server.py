@@ -66,6 +66,8 @@ Suggested workflow: list_l5x_files -> project_overview -> list_programs / list_r
 read rung comments, and follow next_start_rung when truncated. The operands map says
 what each operand means; use get_tag, get_data_type and get_aoi for deeper detail.
 Use find_references and instruction_usage for cross-references.
+Source-protected AOIs and routines are listed with protected=true; their logic is
+not readable.
 """
 
 _EDIT_SECTION = """
@@ -82,7 +84,8 @@ Editing (write tools are enabled):
 - Replacing a UDT, AOI or program: get_spec returns the object as a spec in the form
   the add/replace tools accept; change that spec, then call the replace_* tool.
 - create_*_file and export_component write Studio Import Component files; no project
-  is modified. Import them in Studio 5000.
+  is modified. Import them in Studio 5000. Exports copy source-protected AOIs
+  encoded, as Studio does, and say so in warnings.
 - Logic is not verified by these tools. Open the output in Studio 5000 to verify it.
   Use instructions valid for the project's version (v36+ uses MOVE, EQ, ... instead
   of MOV, EQU, ...). Logix ST has no TRUE/FALSE literals; use 1 and 0.
