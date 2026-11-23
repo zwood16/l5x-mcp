@@ -514,7 +514,9 @@ def create_tags_file(
     export_component(kind="tags", program=...)). Tag-only component files
     import through the Logix Designer SDK (partial import, verified). For the
     Studio GUI, prefer carrying new tags inside a routine/rungs file via the
-    `tags` parameter of create_routine_file / create_rungs_file.
+    `tags` parameter of create_routine_file / create_rungs_file. The program
+    must already exist in the target project: Studio silently skips the tags
+    otherwise (verified); a warning says so when it is not in context_path.
 
     Without context_path the file has a v37 header, which Studio ignores
     (imports into v33+ verified); use instructions valid for the target version.
@@ -537,8 +539,17 @@ def create_tags_file(
         raise L5XError("tags must contain at least one tag spec")
     project = _context(registry, context_path)
     if program:
+        known = any(n.lower() == program.lower() for n in project.programs)
         prog = _host_program(project, program)
         specs, warnings = _add_program_tags(prog, tags, project, context_path)
+        if not known:
+            where = "context_path" if context_path else "a project (no context_path)"
+            warnings.append(
+                f"Program '{prog.name}' is not in {where}. Studio does not create "
+                "a program from a tag file: if the target project lacks it, the "
+                "tags are skipped without any import warning. Create the program "
+                "first (create_program_file)."
+            )
         with _protected_warnings() as protected, edit_errors("tags"):
             component = project.export([prog.tags[s.name] for s in specs])
         return _write(

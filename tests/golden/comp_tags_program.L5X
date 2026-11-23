@@ -1,0 +1,47 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<RSLogix5000Content SchemaRevision="1.0" SoftwareRevision="37.00" TargetName="progCount" TargetType="Tag" TargetCount="3" ContainsContext="true">
+<Controller Use="Context" Name="Example_PLC">
+<DataTypes Use="Context">
+<DataType Name="simple_udt" Family="NoFamily" Class="User">
+<Members>
+<Member Name="ZZZZZZZZZZsimple_udt0" DataType="SINT" Dimension="0" Radix="Decimal" Hidden="true" ExternalAccess="Read/Write"/>
+<Member Name="bool1" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZsimple_udt0" BitNumber="0" ExternalAccess="Read/Write"/>
+<Member Name="bool2" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZsimple_udt0" BitNumber="1" ExternalAccess="Read/Write"/>
+<Member Name="bool3" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZsimple_udt0" BitNumber="2" ExternalAccess="Read/Write"/>
+<Member Name="bool4" DataType="BIT" Dimension="0" Radix="Decimal" Hidden="false" Target="ZZZZZZZZZZsimple_udt0" BitNumber="3" ExternalAccess="Read/Write"/>
+<Member Name="Dint" DataType="DINT" Dimension="0" Radix="Decimal" Hidden="false" ExternalAccess="Read/Write"/>
+<Member Name="real" DataType="DINT" Dimension="0" Radix="Decimal" Hidden="false" ExternalAccess="Read/Write"/>
+<Member Name="lint" DataType="LINT" Dimension="0" Radix="Decimal" Hidden="false" ExternalAccess="Read/Write"/>
+</Members>
+</DataType>
+</DataTypes>
+<Programs Use="Context">
+<Program Use="Context" Name="MainProgram">
+<Tags Use="Context">
+<Tag Use="Target" Name="progCount" TagType="Base" DataType="DINT">
+<Description>
+<![CDATA[Program count]]>
+</Description>
+<Data Format="Decorated">
+<DataValue DataType="DINT" Radix="Decimal" Value="7"/>
+</Data>
+</Tag>
+<Tag Use="Target" Name="progCfg" TagType="Base" DataType="simple_udt">
+<Data Format="Decorated">
+<Structure DataType="simple_udt">
+<DataValueMember Name="bool1" DataType="BOOL" Value="0"/>
+<DataValueMember Name="bool2" DataType="BOOL" Value="0"/>
+<DataValueMember Name="bool3" DataType="BOOL" Value="0"/>
+<DataValueMember Name="bool4" DataType="BOOL" Value="0"/>
+<DataValueMember Name="Dint" DataType="DINT" Radix="Decimal" Value="2"/>
+<DataValueMember Name="real" DataType="DINT" Radix="Decimal" Value="0"/>
+<DataValueMember Name="lint" DataType="LINT" Radix="Decimal" Value="0"/>
+</Structure>
+</Data>
+</Tag>
+<Tag Use="Target" Name="progAlias" TagType="Alias" AliasFor="progCount"/>
+</Tags>
+</Program>
+</Programs>
+</Controller>
+</RSLogix5000Content>

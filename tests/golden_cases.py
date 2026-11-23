@@ -618,6 +618,74 @@ COMP_RUNGS = Case(
     rungs_target=("MainProgram", "MainRoutine"),
 )
 
+COMP_ROUTINE_TAGS = Case(
+    id="comp_routine_tags",
+    golden="comp_routine_tags.L5X",
+    vm="example",
+    steps=(
+        S(
+            create_routine_file,
+            program="MainProgram",
+            routine={
+                "name": "CompRoutineTags",
+                "type": "RLL",
+                "rungs": [
+                    {"text": "XIC(newFlag)Debounce(newDb);", "comment": "New tags"},
+                    {"text": "MOVE(newCount,a_dint);"},
+                ],
+            },
+            tags=[
+                {"name": "newFlag", "data_type": "BOOL", "description": "New flag"},
+                {"name": "newCount", "data_type": "DINT", "value": 4},
+                {"name": "newDb", "data_type": "Debounce"},
+            ],
+            context_path=SOURCE,
+        ),
+    ),
+)
+
+COMP_RUNGS_TAGS = Case(
+    id="comp_rungs_tags",
+    golden="comp_rungs_tags.L5X",
+    vm="example",
+    steps=(
+        S(
+            create_rungs_file,
+            program="MainProgram",
+            routine="MainRoutine",
+            # Studio stores TON literals in the tag and writes ``?`` in the rung.
+            rungs=[{"text": "XIC(a_bool)TON(rungTmr,?,?);", "comment": "New timer"}],
+            tags=[{"name": "rungTmr", "data_type": "TIMER", "value": {"PRE": 500}}],
+            context_path=SOURCE,
+        ),
+    ),
+    import_op="import_rungs",
+    rungs_target=("MainProgram", "MainRoutine"),
+)
+
+COMP_TAGS_PROGRAM = Case(
+    id="comp_tags_program",
+    golden="comp_tags_program.L5X",
+    vm="example",
+    steps=(
+        S(
+            create_tags_file,
+            program="MainProgram",
+            tags=[
+                {
+                    "name": "progCount",
+                    "data_type": "DINT",
+                    "value": 7,
+                    "description": "Program count",
+                },
+                {"name": "progCfg", "data_type": "simple_udt", "value": {"Dint": 2}},
+                {"name": "progAlias", "alias_for": "progCount"},
+            ],
+            context_path=SOURCE,
+        ),
+    ),
+)
+
 
 # ----------------------------------------------------------------------
 # Component files: export_component (existing objects, with dependencies)
@@ -686,6 +754,30 @@ EXP_RUNGS = Case(
     rungs_target=("MainProgram", "SequenceRoutine"),
 )
 
+#: Source-protected content: the routine calls the encoded SeqCtrl_Protected
+#: (copied as context), and the program also holds an encoded routine.
+EXP_ROUTINE_PROTECTED = Case(
+    id="exp_routine_protected",
+    golden="exp_routine_protected.L5X",
+    vm="example",
+    steps=(
+        S(
+            export_component,
+            kind="routine",
+            program="AnotherProgram",
+            names=["Main"],
+            path=SOURCE,
+        ),
+    ),
+)
+
+EXP_PROGRAM_PROTECTED = Case(
+    id="exp_program_protected",
+    golden="exp_program_protected.L5X",
+    vm="example",
+    steps=(S(export_component, kind="program", names=["AnotherProgram"], path=SOURCE),),
+)
+
 
 CASES: tuple[Case, ...] = (
     CHAIN_FINAL,
@@ -696,10 +788,15 @@ CASES: tuple[Case, ...] = (
     COMP_TAGS,
     COMP_ROUTINE,
     COMP_RUNGS,
+    COMP_ROUTINE_TAGS,
+    COMP_RUNGS_TAGS,
+    COMP_TAGS_PROGRAM,
     EXP_DATA_TYPE,
     EXP_AOI,
     EXP_PROGRAM,
     EXP_TAGS,
     EXP_ROUTINE,
     EXP_RUNGS,
+    EXP_ROUTINE_PROTECTED,
+    EXP_PROGRAM_PROTECTED,
 )

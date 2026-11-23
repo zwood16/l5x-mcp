@@ -461,6 +461,24 @@ class TestCreateComponents:
         assert component.target.name == "NewTag"
         assert component.programs["SafetyProgram"].tags["NewTag"].value == 4
         assert "NewTag" not in component.controller_tags
+        assert "warnings" not in result
+
+    def test_tags_file_unknown_program_warns(self, editable):
+        # Studio skips program tags of a program the target lacks, silently
+        # (SDK-verified on v37/v38), so the tool must say so.
+        result = create_tags_file(
+            editable,
+            tags=[{"name": "onlyCount", "data_type": "DINT", "value": 3}],
+            program="TagsOnlyProg",
+            context_path=EXAMPLE,
+            output_path="ptags_new.L5X",
+        )
+
+        assert result["targets"] == ["TagsOnlyProg/onlyCount"]
+        assert any(
+            "'TagsOnlyProg' is not in context_path" in w and "skipped" in w
+            for w in result["warnings"]
+        )
 
     def test_tags_file_program_tag_name_must_be_free(self, editable):
         with pytest.raises(L5XError, match="already exists"):
