@@ -35,12 +35,12 @@ Wheels are attached to the [releases](https://github.com/zwood16/l5x-mcp/release
 of this repository. [uv](https://docs.astral.sh/uv/getting-started/installation/) can install them straight from the release URL. Because
 `py_l5x` isn't on PyPI either, pass its release wheel with `--with`. Without it, uv
 fails with `py-l5x was not found in the package registry`. Use a `py_l5x` version
-that meets this server's requirement (currently `py-l5x>=0.4.0`).
+that meets this server's requirement (currently `py-l5x>=0.5.1`).
 
 **Global install** (puts the `l5x-mcp` command on your PATH):
 
 ```bash
-uv tool install --with https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl https://github.com/zwood16/l5x-mcp/releases/download/v0.3.0/l5x_mcp-0.3.0-py3-none-any.whl
+uv tool install --with https://github.com/zwood16/py_l5x/releases/download/v0.5.1/py_l5x-0.5.1-py3-none-any.whl https://github.com/zwood16/l5x-mcp/releases/download/v0.3.0/l5x_mcp-0.3.0-py3-none-any.whl
 ```
 
 Then register the `l5x-mcp` command with Claude Code (see
@@ -86,7 +86,7 @@ Pick the line that matches how you installed the server:
 claude mcp add l5x -s user -- l5x-mcp
 
 # No install: run straight from the release wheels with uvx
-claude mcp add l5x -s user -- uvx --with https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl --from https://github.com/zwood16/l5x-mcp/releases/download/v0.3.0/l5x_mcp-0.3.0-py3-none-any.whl l5x-mcp
+claude mcp add l5x -s user -- uvx --with https://github.com/zwood16/py_l5x/releases/download/v0.5.1/py_l5x-0.5.1-py3-none-any.whl --from https://github.com/zwood16/l5x-mcp/releases/download/v0.3.0/l5x_mcp-0.3.0-py3-none-any.whl l5x-mcp
 
 # Source checkout (run `uv sync` in the checkout first)
 claude mcp add l5x -s user -- uv run --project /path/to/l5x-mcp --no-sync l5x-mcp

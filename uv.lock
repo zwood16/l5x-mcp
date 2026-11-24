@@ -323,7 +323,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "mcp", extras = ["cli"], specifier = ">=2.3.0" },
-    { name = "py-l5x", url = "https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl" },
+    { name = "py-l5x", url = "https://github.com/zwood16/py_l5x/releases/download/v0.5.1/py_l5x-0.5.1-py3-none-any.whl" },
 ]
 
 [package.metadata.requires-dev]
@@ -429,10 +429,10 @@ wheels = [
 
 [[package]]
 name = "py-l5x"
-version = "0.5.0"
-source = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl" }
+version = "0.5.1"
+source = { url = "https://github.com/zwood16/py_l5x/releases/download/v0.5.1/py_l5x-0.5.1-py3-none-any.whl" }
 wheels = [
-    { url = "https://github.com/zwood16/py_l5x/releases/download/v0.5.0/py_l5x-0.5.0-py3-none-any.whl", hash = "sha256:d823fb4b8fb4549cea2d02788d9aa286182b819287f534041f6d42f95be8c391" },
+    { url = "https://github.com/zwood16/py_l5x/releases/download/v0.5.1/py_l5x-0.5.1-py3-none-any.whl", hash = "sha256:bb8529534cf4bebe7227253cb7ca394ae913d7520a0a62cfe301a0e37ff66219" },
 ]
 
 [[package]]
